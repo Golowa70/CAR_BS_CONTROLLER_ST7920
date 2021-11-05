@@ -400,18 +400,59 @@ void fnPrintMainView(void){
   uint8_t float_m, float_n; // переменные для разбития числа на целую и дробную часть
 
   u8g2.clearBuffer();					// 
-  u8g2.setFont(u8g2_font_ncenB18_tr);	//
+  
 
-  /*
+  u8g2.setFont(u8g2_font_5x7_tr);
+
+  main_data.battery_voltage = 12.5;
   float_m = main_data.battery_voltage * 10;
   float_n = float_m%10;
   float_m = float_m/10;
-  sprintf(buffer,"%d.%d v",float_m, float_n);
-  u8g2.drawStr(80, 30, buffer);
-  */
-  main_data.water_level_liter = 235;
+  sprintf(buffer,"%d.%dv",float_m, float_n);
+  u8g2.drawStr(102, 8, buffer);
+
+  main_data.inside_temperature = 24.5;
+  float_m = main_data.inside_temperature * 10;
+  float_n = float_m%10;
+  float_m = float_m/10;
+  sprintf(buffer,">%d.%dC",float_m, float_n);
+  u8g2.drawStr(98, 18, buffer);
+
+  main_data.outside_temperature = 28.7;
+  float_m = main_data.outside_temperature * 10;
+  float_n = float_m%10;
+  float_m = float_m/10;
+  sprintf(buffer,"<%d.%dC",float_m, float_n);
+  u8g2.drawStr(98, 28, buffer);
+
+  u8g2.drawBox(64,1,21,8);
+  u8g2.setDrawColor(0);
+  u8g2.drawStr(65, 8, "PUMP");
+  u8g2.setDrawColor(1);
+
+  u8g2.drawBox(64,11,21,8);
+  u8g2.setDrawColor(0);
+  u8g2.drawStr(65, 18, "CONV");
+  u8g2.setDrawColor(1);
+
+  u8g2.drawBox(64,21,21,8);
+  u8g2.setDrawColor(0);
+  u8g2.drawStr(65, 28, "FRDG");
+  u8g2.setDrawColor(1);
+
+  u8g2.drawBox(1,1,16,8);
+  u8g2.setDrawColor(0);
+  u8g2.drawStr(2, 8, "ERR");
+  u8g2.setDrawColor(1);
+  
+
+  main_data.water_level_liter = 35;
   sprintf(buffer,"%d L",main_data.water_level_liter);
-  u8g2.drawStr(60, , buffer);
+  u8g2.setFont(u8g2_font_ncenB18_tr);	//
+  u8g2.drawStr(50, 55, buffer);
+
+
+  u8g2.drawXBM(0, 12, 50, 50, water_level_50x50);
 
   u8g2.sendBuffer();
 }
