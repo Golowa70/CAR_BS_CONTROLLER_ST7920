@@ -46,7 +46,7 @@ void setup() {
   Serial.println(display_width);
   Serial.println(display_num_lines);
 
-  //menu_mode = MENU_PARAM_VIEW;
+  menu_mode = MENU_MAIN_VIEW;
 
   timerSelectedFrameBlink.setInterval(500); 
 
@@ -405,13 +405,13 @@ void fnPrintMainView(void){
   sprintf(buffer,"%d.%dv",float_m, float_n);
 
   u8g2.clearBuffer();					// 
-  u8g2.setFont(u8g2_font_ncen);	//
+  u8g2.setFont(u8g2_font_ncenB10_tr);	//
 
   float_m = main_data.battery_voltage * 10;
   float_n = float_m%10;
   float_m = float_m/10;
-  sprintf(buffer,"Batery V   %d.%dv",float_m, float_n);
-  u8g2.drawStr(5, 20, buffer);
+  sprintf(buffer,"%d.%d v",float_m, float_n);
+  u8g2.drawStr(80, 30, buffer);
   
   u8g2.sendBuffer();
 }
