@@ -399,20 +399,20 @@ void fnPrintMainView(void){
   char buffer[20] = {0,};
   uint8_t float_m, float_n; // переменные для разбития числа на целую и дробную часть
 
-  float_m = main_data.battery_voltage * 10;
-  float_n = float_m%10;
-  float_m = float_m/10;
-  sprintf(buffer,"%d.%dv",float_m, float_n);
-
   u8g2.clearBuffer();					// 
-  u8g2.setFont(u8g2_font_ncenB10_tr);	//
+  u8g2.setFont(u8g2_font_ncenB18_tr);	//
 
+  /*
   float_m = main_data.battery_voltage * 10;
   float_n = float_m%10;
   float_m = float_m/10;
   sprintf(buffer,"%d.%d v",float_m, float_n);
   u8g2.drawStr(80, 30, buffer);
-  
+  */
+  main_data.water_level_liter = 235;
+  sprintf(buffer,"%d L",main_data.water_level_liter);
+  u8g2.drawStr(60, , buffer);
+
   u8g2.sendBuffer();
 }
 
