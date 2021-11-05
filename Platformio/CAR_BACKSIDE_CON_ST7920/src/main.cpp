@@ -46,7 +46,7 @@ void setup() {
   Serial.println(display_width);
   Serial.println(display_num_lines);
 
-  menu_mode = MENU_PARAM_VIEW;
+  //menu_mode = MENU_PARAM_VIEW;
 
   timerSelectedFrameBlink.setInterval(500); 
 
@@ -396,9 +396,23 @@ void printMenuSetpoints(void){
 //----------- Функция отрисовки главногоэкрана ------------------------------------
 void fnPrintMainView(void){
 
+  char buffer[20] = {0,};
+  uint8_t float_m, float_n; // переменные для разбития числа на целую и дробную часть
+
+  float_m = main_data.battery_voltage * 10;
+  float_n = float_m%10;
+  float_m = float_m/10;
+  sprintf(buffer,"%d.%dv",float_m, float_n);
+
   u8g2.clearBuffer();					// 
-  u8g2.setFont(u8g2_font_ncenB14_tr);	//
-  u8g2.drawStr(40, 20, "HELLO");
+  u8g2.setFont(u8g2_font_ncen);	//
+
+  float_m = main_data.battery_voltage * 10;
+  float_n = float_m%10;
+  float_m = float_m/10;
+  sprintf(buffer,"Batery V   %d.%dv",float_m, float_n);
+  u8g2.drawStr(5, 20, buffer);
+  
   u8g2.sendBuffer();
 }
 
@@ -424,8 +438,6 @@ void fnPrintMenuParamView(void){
     fnPrintMenuParamItemVal(i+n-1, i); // Выводим значение пункта меню уставок   
   }
 
-  //fnPrintSelectionFrame(constrain(menu_pointer, 0, MENU_SETPOINTS_NUM_ITEMS));
-
   u8g2.sendBuffer();
 
 }
@@ -449,79 +461,80 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
     sprintf(buffer,"%d.%dv",float_m, float_n);
     break;
 
-  case 1:
+  case 1: 
+    sprintf(buffer,"%uL", main_data.water_level_liter);
+    break;
+  case 2:
     float_m = main_data.outside_temperature * 10;
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dC",float_m, float_n);
     break;
 
-  case 2:
+  case 3:
     float_m = main_data.inside_temperature * 10;
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dC",float_m, float_n);
     break;
 
-  case 3:
+  case 4:
     float_m = main_data.fridge_temperature * 10;
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dC",float_m, float_n);
     break;
 
-  case 4:
+  case 5:
     float_m = main_data.sensors_supply_voltage * 10;
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dv",float_m, float_n);
     break;
 
-  case 5:
+  case 6:
     float_m = main_data.res_sensor_resistance * 10;
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%d",float_m, float_n);
     break;
 
-  case 6:
+  case 7:
     sprintf(buffer,"%1u", main_data.door_switch_state);
     
     break;
 
-  case 7:
+  case 8:
     sprintf(buffer,"%1u", main_data.proximity_sensor_state);
     break;
-  case 8:
+  case 9:
     sprintf(buffer,"%1u", main_data.ignition_switch_state);
     break;
 
-  case 9:
+  case 10:
     sprintf(buffer,"%1u", main_data.low_washer_water_level);
     break;
-  case 10:
+  case 11:
     sprintf(buffer,"%1u", main_data.converter_output_state);
     break;
-  case 11:
+  case 12:
     sprintf(buffer,"%1u", main_data.fridge_output_state);
     break;
 
-  case 12:
-    sprintf(buffer,"%1u", main_data.pump_output_state);
-    break;
   case 13:
-    
+    sprintf(buffer,"%1u", main_data.pump_output_state);
     break;
   case 14:
     
     break;
-
   case 15:
     
     break;
+
   case 16:
     
     break;
+  
   case 17:
     
     break;
