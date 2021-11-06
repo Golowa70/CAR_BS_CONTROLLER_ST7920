@@ -60,109 +60,116 @@ void loop() {
   buttonDown.tick();
   buttonEnter.tick();
 
-  switch (menu_mode)
-  {
-    case MENU_MAIN_VIEW:
+  //меню----------------------------------------------------------------------
+    //определение текущей страницы меню
+    if(menu_current_item < display_num_lines) menu_current_page = 0;  
+    else if(menu_current_item < display_num_lines*2)menu_current_page = 1 ;
+    else if(menu_current_item < display_num_lines*3)menu_current_page = 2 ;
+    else if(menu_current_item < display_num_lines*4)menu_current_page = 3 ;
+    else if(menu_current_item < display_num_lines*5)menu_current_page = 4 ;
+    else if(menu_current_item < display_num_lines*6)menu_current_page = 5 ;
+    else if(menu_current_item < display_num_lines*7)menu_current_page = 6 ;
 
-      fnPrintMainView();
+    switch (menu_mode)
+    {
+      case MENU_MAIN_VIEW:
 
-      if(buttonUp.isClick()){
-        menu_mode = MENU_SETPOINTS;
-        menu_pointer = 0;
-      }
-      if(buttonDown.isClick()){
-        menu_mode = MENU_PARAM_VIEW;
-        menu_pointer = 0;
-      }
+        fnPrintMainView();
+
+        if(buttonUp.isClick()){
+          menu_mode = MENU_SETPOINTS;
+          menu_current_item = 0;
+        }
+        if(buttonDown.isClick()){
+          menu_mode = MENU_PARAM_VIEW;
+          menu_current_item = 0;
+        }
+        break;
+
+      case MENU_PARAM_VIEW:
+
+        fnPrintMenuParamView();
+
+        if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
+          menu_current_item = constrain(menu_current_item + display_num_lines , 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
+          Serial.println(menu_current_item);
+        }
+
+        if (buttonDown.isClick() or buttonDown.isHold()) {   
+          menu_current_item = constrain(menu_current_item - display_num_lines, 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); 
+          Serial.println(menu_current_item);
+        }
+
+        if(buttonEnter.isHold()){
+          menu_mode = MENU_MAIN_VIEW;
+          menu_current_item = 0;
+        }
+
+        break;
+
+      case MENU_SETPOINTS:
+
+        printMenuSetpoints();
+
+        if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
+          menu_current_item = constrain(menu_current_item + 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
+          Serial.println(menu_current_item);
+        }
+
+        if (buttonDown.isClick() or buttonDown.isHold()) {   
+          menu_current_item = constrain(menu_current_item - 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); 
+          Serial.println(menu_current_item);
+        }
+
+        if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS_EDIT_MODE;
+        if(buttonEnter.isHold()){
+          menu_mode = MENU_MAIN_VIEW;
+          menu_current_item = 0;
+        }
       break;
 
-    case MENU_PARAM_VIEW:
+      case MENU_SETPOINTS_EDIT_MODE:
 
-      fnPrintMenuParamView();
+        printMenuSetpoints();
 
-      if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
-        menu_pointer = constrain(menu_pointer + display_num_lines , 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
-        Serial.println(menu_pointer);
-      }
+        if (buttonUp.isClick() or buttonUp.isHold()){
+          SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]-1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
+          Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
+        }
 
-      if (buttonDown.isClick() or buttonDown.isHold()) {   
-        menu_pointer = constrain(menu_pointer - display_num_lines, 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); 
-        Serial.println(menu_pointer);
-      }
+        if (buttonDown.isClick() or buttonDown.isHold()){
+          SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]+1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
+          Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
+        }
 
-      if(buttonEnter.isHold()){
-        menu_mode = MENU_MAIN_VIEW;
-        menu_pointer = 0;
-      }
+        if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS;
 
       break;
+      
+      default:
+      
+      break;
 
-    case MENU_SETPOINTS:
+    }
+  //конец меню
 
-      printMenuSetpoints();
 
-      if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
-        menu_pointer = constrain(menu_pointer + 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
-        Serial.println(menu_pointer);
-      }
-
-      if (buttonDown.isClick() or buttonDown.isHold()) {   
-        menu_pointer = constrain(menu_pointer - 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); 
-        Serial.println(menu_pointer);
-      }
-
-      if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS_EDIT_MODE;
-      if(buttonEnter.isHold()){
-        menu_mode = MENU_MAIN_VIEW;
-        menu_pointer = 0;
-      }
-    break;
-
-    case MENU_SETPOINTS_EDIT_MODE:
-
-      printMenuSetpoints();
-
-      if (buttonUp.isClick() or buttonUp.isHold()){
-        //SetpointsUnion.SetpointsArray[menu_pointer] = constrain(SetpointsUnion.SetpointsArray[menu_pointer]-1,0,3);
-        SetpointsUnion.SetpointsArray[menu_pointer] = constrain(SetpointsUnion.SetpointsArray[menu_pointer]-1,param_range_min[menu_pointer],param_range_max[menu_pointer]);
-        Serial.println(SetpointsUnion.SetpointsArray[menu_pointer]);
-      }
-
-      if (buttonDown.isClick() or buttonDown.isHold()){
-        //SetpointsUnion.SetpointsArray[menu_pointer] = constrain(SetpointsUnion.SetpointsArray[menu_pointer]+1,0,5);
-        SetpointsUnion.SetpointsArray[menu_pointer] = constrain(SetpointsUnion.SetpointsArray[menu_pointer]+1,param_range_min[menu_pointer],param_range_max[menu_pointer]);
-        Serial.println(SetpointsUnion.SetpointsArray[menu_pointer]);
-      }
-
-      if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS;
-
-    break;
-    
-    default:
-    
-    break;
-
-  }
-
-    
-  //Serial.println(menu_mode);
 
 
 }
 
 //********************************************************************************
-
+// 
 void fnPrintSelectionFrame(uint8_t item_pointer) {
 
   uint8_t n = 0;
-  static bool flag_blink = false;
 
   if(item_pointer < display_num_lines)n = item_pointer;
   else n = item_pointer % display_num_lines;
 
   if(menu_mode == MENU_SETPOINTS_EDIT_MODE){
     if(timerSelectedFrameBlink.isReady())flag_blink = !flag_blink;
-    if(flag_blink)u8g2.drawRFrame(0, n*(LCD_FONT_HIGHT + LCD_LINE_SPACER), display_width-1, (LCD_FONT_HIGHT + LCD_LINE_SPACER), 2);
+    if(flag_blink)u8g2.drawRFrame(0, n*(LCD_FONT_HIGHT + LCD_LINE_SPACER), display_width-2, (LCD_FONT_HIGHT + LCD_LINE_SPACER), 2);
     else{
       u8g2.setDrawColor(0);
       u8g2.drawRFrame(0, n*(LCD_FONT_HIGHT + LCD_LINE_SPACER), display_width-1, (LCD_FONT_HIGHT + LCD_LINE_SPACER), 2);
@@ -170,22 +177,20 @@ void fnPrintSelectionFrame(uint8_t item_pointer) {
     }
   }
   else{
-    u8g2.drawRFrame(0, n*(LCD_FONT_HIGHT + LCD_LINE_SPACER), display_width-1, (LCD_FONT_HIGHT + LCD_LINE_SPACER), 2);
+    u8g2.drawRFrame(0, n*(LCD_FONT_HIGHT + LCD_LINE_SPACER), display_width-2, (LCD_FONT_HIGHT + LCD_LINE_SPACER), 2);
   }
   
-  // Указатель в виде битмапа (картинки)
- // u8g2.drawBitmap(0, item_pointer * 8, 10, 8, ptr_bmp);
 }
 
 
-// -----------Функция для печати строки имени пункта из prm-----------------
+// -----------Функция печати имени пункта меню из prm (общая для всех меню) --------------
 void fnPrintMenuItemName(uint8_t _num_item, uint8_t _num_line, const char* const* _names) {
   
-  char buffer[32] = {0,};                                            // Буфер на полную строку
+  char buffer[32] = {0,};                            // Буфер на полную строку
   
   uint16_t ptr = 0;
   ptr = pgm_read_word(&(_names[_num_item]));         // Получаем указатель на первый символ строки
-  uint8_t i = 0;                                              // Переменная - счетчик
+  uint8_t i = 0;                                     // Переменная - счетчик
 
   do {                                            // Начало цикла
     buffer[i] = (char)(pgm_read_byte(ptr++));     // Прочитать в буфер один символ из PGM и подвинуть указатель на 1
@@ -204,10 +209,15 @@ void fnPrintMenuItemName(uint8_t _num_item, uint8_t _num_line, const char* const
 }
 
 
-//----------- функция печати значения пункта меню уставок --------------------------------------------------
+//--------- Функция печати значения пункта меню уставок ---------------------------------
 void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
 
+  //если все параметры одного типа то можно выводить через массив
+  //sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+  //u8g2.drawStr(98,(num_line*12)-2,buffer);
+
   char buffer[10] = {0,};
+
   switch (num_item)
   {
   case 0:
@@ -356,44 +366,35 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
   }
   
-  //sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
-
-
-  u8g2.drawStr(108,(num_line*12)-2,buffer);
-  //u8g2.setCursor(108,(num_line*12)-2);
-  //u8g2.print(u8x8_u8toa(SetpointsUnion.SetpointsArray[num], 3) );
+  u8g2.drawStr(107,(num_line*12)-2,buffer);
+  
 }
 
 
-//------------- Функция вывода меню уставок ------------------------------------------------
+//--------- Функция вывода меню уставок ------------------------------------------------
 void printMenuSetpoints(void){
 
   u8g2.clearBuffer();					// 
   u8g2.setFont(u8g2_font_ncenB08_tr);	// 
 
-  for (uint8_t i = 0; i <= display_num_lines; i++) {   // Цикл, выводящий пункты на дисплей
-    uint8_t n = 0;
+  for (uint8_t i = 0; i <= display_num_lines; i++) {   // Цикл, выводящий пункты на дисплей  
     
-    //определение смещения для вывода нужной страницы
-    if(menu_pointer < display_num_lines) n = 0;  
-    else if(menu_pointer < display_num_lines*2)n = display_num_lines ;
-    else if(menu_pointer < display_num_lines*3)n = display_num_lines*2 ;
-    else if(menu_pointer < display_num_lines*4)n = display_num_lines*3 ;
-    else if(menu_pointer < display_num_lines*5)n = display_num_lines*4 ;
-    else if(menu_pointer < display_num_lines*6)n = display_num_lines*5 ;
-    else if(menu_pointer < display_num_lines*7)n = display_num_lines*6 ;
-    
-    fnPrintMenuItemName(i+n-1, i, setpoints_menu_names); // Выводим название пункта 
-    fnPrintMenuSetpointsItemVal(i+n-1, i); // Выводим значение пункта меню уставок   
+    fnPrintMenuItemName(i+(menu_current_page*display_num_lines)-1, i, setpoints_menu_names); // Выводим название пункта 
+    fnPrintMenuSetpointsItemVal(i+(menu_current_page*display_num_lines)-1, i); // Выводим значение пункта меню уставок   
   }  
 
-  fnPrintSelectionFrame(constrain(menu_pointer, 0, MENU_SETPOINTS_NUM_ITEMS));
-    
+  //рисуем рамку
+  fnPrintSelectionFrame(constrain(menu_current_item, 0, MENU_SETPOINTS_NUM_ITEMS));
+
+  //рисуем боковой скролл бар 
+  uint8_t scroll_bar_height = display_height/(MENU_SETPOINTS_NUM_ITEMS/display_num_lines);
+  u8g2.drawVLine(127, menu_current_page*scroll_bar_height, scroll_bar_height);
+      
   u8g2.sendBuffer();	
 }
 
 
-//----------- Функция отрисовки главногоэкрана ------------------------------------
+//-------- Функция вывода главного экрана -----------------------------------------------
 void fnPrintMainView(void){
 
   char buffer[20] = {0,};
@@ -457,40 +458,30 @@ void fnPrintMainView(void){
   u8g2.sendBuffer();
 }
 
-//-------- Функция печати текущих параметров  ------------------------------------------
+//-------- Функция вывода меню параметров  ---------------------------------------------
 void fnPrintMenuParamView(void){
 
   u8g2.clearBuffer();					// 
   u8g2.setFont(u8g2_font_ncenB08_tr);	// 
 
   for (uint8_t i = 0; i <= display_num_lines; i++) {   // Цикл, выводящий пункты на дисплей
-    uint8_t n = 0;
-    
-    //определение смещения для вывода нужной страницы
-    if(menu_pointer < display_num_lines) n = 0;  
-    else if(menu_pointer < display_num_lines*2)n = display_num_lines ;
-    else if(menu_pointer < display_num_lines*3)n = display_num_lines*2 ;
-    else if(menu_pointer < display_num_lines*4)n = display_num_lines*3 ;
-    else if(menu_pointer < display_num_lines*5)n = display_num_lines*4 ;
-    else if(menu_pointer < display_num_lines*6)n = display_num_lines*5 ;
-    else if(menu_pointer < display_num_lines*7)n = display_num_lines*6 ;
-    
-    fnPrintMenuItemName(i+n-1, i, parameters_names); // Выводим название пункта 
-    fnPrintMenuParamItemVal(i+n-1, i); // Выводим значение пункта меню уставок   
+
+    fnPrintMenuItemName(i+(menu_current_page*display_num_lines)-1, i, parameters_names); // Выводим название пункта 
+    fnPrintMenuParamItemVal(i+(menu_current_page*display_num_lines)-1, i); // Выводим значение пункта меню уставок   
   }
+
+  uint8_t scroll_bar_height = display_height/(MENU_PARAM_VIEW_NUM_ITEMS/display_num_lines);
+  u8g2.drawVLine(127, menu_current_page*scroll_bar_height, scroll_bar_height);
 
   u8g2.sendBuffer();
 
 }
 
 
-//--------------
+//-------  функция печати значения пункта меню параметров ------------------------------
 void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 
   char buffer[10] = {0,};
-
-  //sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
-  //u8g2.drawStr(108,(num_line*12)-2,buffer);
   uint8_t float_m, float_n; // переменные для разбития числа на целую и дробную часть
   
   switch (num_item)
@@ -593,7 +584,7 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
     break;
   }
 
-  u8g2.drawStr(102,(num_line*12)-2,buffer);
+  u8g2.drawStr(98,(num_line*12)-2,buffer);
 }
 
 

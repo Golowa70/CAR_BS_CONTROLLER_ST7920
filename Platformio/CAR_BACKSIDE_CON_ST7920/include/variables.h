@@ -239,15 +239,13 @@ struct MyData
    255,255,255,255,255,
   };
   
-  volatile int8_t menu_pointer = 0; // Переменная указатель на текущий пункт меню
+  int8_t menu_pointer = 0; // Переменная указатель на текущий пункт меню
   uint8_t menu_mode = MENU_SETPOINTS;
+  bool flag_blink = false;
 
-  uint8_t current_item;
-  uint8_t *variable_value = NULL;
-  uint8_t var_min_value;
-  uint8_t var_max_value;
-
-
+  uint8_t menu_current_item;
+  uint8_t menu_current_page = 0;
+  
 //***********************************************************************************
 
 //********** ONE WIRE VARIABLES *****************************************************
