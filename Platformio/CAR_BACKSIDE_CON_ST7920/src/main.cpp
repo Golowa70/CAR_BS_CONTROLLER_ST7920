@@ -608,21 +608,23 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 //------  Функция печати меню сканнера 1Wire --------------------------------------------
 void fnPrintMenu1WireScanner(void){
 
+  char buffer [32] = {0,};
+
   u8g2.clearBuffer();					// 
   u8g2.setFont(u8g2_font_ncenB08_tr);	// 
-  u8g2.println("OneWire scanner");
+  u8g2.drawStr(20,10, "OneWire scanner");
   u8g2.sendBuffer();
   u8g2.clearBuffer();	
+  delay(2000);
 
-
-  while(1){
+  while(!flag_ow_scan_to_start){
 
     buttonUp.tick();
     buttonDown.tick();
     buttonEnter.tick(); 
 
     if(buttonEnter.isClick()){
-      
+      flag_ow_scan_to_start = true;
     }
 
     if(buttonEnter.isHold()){
@@ -637,76 +639,86 @@ void fnPrintMenu1WireScanner(void){
       
     }
 
-
-    uint8_t address[8];
-    String tempString = "";
-    String tempString2 = "";
-
-    if (oneWire.search(address))
-    {
-          do
-          {
-                temp_sensors_data.num_founded_sensors++;
-
-                switch (temp_sensors_data.num_founded_sensors)
-                {
-                case 1:
-                      for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
-                      {
-                            temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
-                            thermometerID_1[j] = address[j];
-                            tempString2 = String(address[j], HEX);
-                            tempString += tempString2;
-                            if (j < 7)
-                                  tempString += ". ";
-                      }
-                      u8g2.drawStr(30,20, tempString); //   myNex.writeStr("p9t2.txt", tempString); //
-                      tempString = "";
-                      tempString2 = "";
-                      break;
-
-                case 2:
-                      for (uint8_t j = 0; j < 8; j++)
-                      {
-                            setpoints_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
-                            thermometerID_2[j] = address[j];
-                            tempString2 = String(address[j], HEX);
-                            tempString += tempString2;
-                            if (j < 7)
-                                  tempString += ". ";
-                      }
-                      u8g2.drawStr(30,40, tempString); //myNex.writeStr("p9t3.txt", tempString);
-                      tempString = "";
-                      tempString2 = "";
-                      break;
-                case 3:
-                      for (uint8_t j = 0; j < 8; j++)
-                      {
-                            setpoints_data.sensors_ID_array[SPARE_SENSOR - 1][j] = address[j];
-                            thermometerID_3[j] = address[j];
-                            tempString2 = String(address[j], HEX);
-                            tempString += tempString2;
-                            if (j < 7)
-                                  tempString += ". ";
-                      }
-                      myNex.writeStr("p9t4.txt", tempString);
-                      tempString = "";
-                      tempString2 = "";
-                      break;
-
-                default:
-                      break;
-                }
-
-                if (setpoints_data.num_found_temp_sensors > 3)
-                      break; // если найдено больше трёх датчиков - выходим из цикла
-
-          } while (oneWire.search(address));
-    }
-
-    
-
   }
+
+  uint8_t address[8];
+  String tempString = "";
+  String tempString2 = "";
+
+  if (oneWire.search(address))
+  {
+        do
+        {
+              temp_sensors_data.num_founded_sensors++;
+
+              switch (temp_sensors_data.num_founded_sensors)
+              {
+              case 1:
+                    for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
+                    {
+                          temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
+                          thermometerID_1[j] = address[j];
+                          tempString2 = String(address[j], HEX);
+                          tempString += tempString2;
+                          if (j < 7)
+                                tempString += ". ";
+                    }
+                    tempString.toCharArray(buffer, sizeof(tempString));
+                    u8g2.drawStr(20,20, buffer); //   myNex.writeStr("p9t2.txt", tempString); //
+                    tempString = "";
+                    tempString2 = "";
+                    break;
+
+              case 2:
+                    for (uint8_t j = 0; j < 8; j++)
+                    {
+                          temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
+                          thermometerID_2[j] = address[j];
+                          tempString2 = String(address[j], HEX);
+                          tempString += tempString2;
+                          if (j < 7)
+                                tempString += ". ";
+                    }
+                    tempString.toCharArray(buffer, sizeof(tempString));
+                    u8g2.drawStr(20,30, buffer); //myNex.writeStr("p9t3.txt", tempString);
+                    tempString = "";
+                    tempString2 = "";
+                    break;
+              case 3:
+                    for (uint8_t j = 0; j < 8; j++)
+                    {
+                          temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][j] = address[j];
+                          thermometerID_3[j] = address[j];
+                          tempString2 = String(address[j], HEX);
+                          tempString += tempString2;
+                          if (j < 7)
+                                tempString += ". ";
+                    }
+                    tempString.toCharArray(buffer, sizeof(tempString));
+                    u8g2.drawStr(20,40, buffer); //myNex.writeStr("p9t4.txt", tempString);
+                    tempString = "";
+                    tempString2 = "";
+                    break;
+
+              default:
+                    break;
+              }
+
+              if (temp_sensors_data.num_founded_sensors > 3){
+                
+                u8g2.drawStr(30,40, "Founded >3 sensors");
+                break; // если найдено больше трёх датчиков - выходим из цикла
+              }
+
+        } while (oneWire.search(address));
+  }
+
+  if(temp_sensors_data.num_founded_sensors == 0)u8g2.drawStr(20,40, "No sensors found");
+  
+  u8g2.sendBuffer();
+
+  delay(5000);
+  
 
 
 }
