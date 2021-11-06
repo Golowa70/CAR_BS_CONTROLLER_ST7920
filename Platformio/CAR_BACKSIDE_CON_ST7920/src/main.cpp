@@ -4,6 +4,8 @@
 #include "GyverTimer.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <GyverTimers.h>
+
 
 #include "defines.h"
 #include "variables.h"
@@ -42,12 +44,22 @@ void fnPrintMenuParamView(void);
 void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line);
 void fnPrintMenu1WireScanner(void);
 
+//обработчик прерывания от Timer3 
+ISR(TIMER3_A)
+{
+  buttonUp.tick();
+  buttonDown.tick();
+  buttonEnter.tick();
+}
+
 
 void setup() {
 
   Serial.begin(115200);
   fnIOInit();
   u8g2.begin();
+  Timer3.setPeriod(10000); // Устанавливаем период таймера 500000 мкс -> 0.5 гц (сброс внешнего WDT)
+  Timer3.enableISR(CHANNEL_A);
 
   display_height = u8g2.getDisplayHeight();
   display_width = u8g2.getDisplayWidth();
@@ -60,17 +72,14 @@ void setup() {
 
   timerBlink.setInterval(500); 
 
+
+  digitalWrite(SENSORS_SUPPLY_5v, HIGH);
   fnPrintMenu1WireScanner();
 
 }
 
 void loop() {
   
-  delay(10);
-
-  buttonUp.tick();
-  buttonDown.tick();
-  buttonEnter.tick();
 
   //меню----------------------------------------------------------------------
     //определение текущей страницы меню
@@ -612,19 +621,18 @@ void fnPrintMenu1WireScanner(void){
 
   u8g2.clearBuffer();					// 
   u8g2.setFont(u8g2_font_ncenB08_tr);	// 
-  u8g2.drawStr(20,10, "OneWire scanner");
+  u8g2.drawStr(10,10, "OneWire scanner");
+  u8g2.drawStr(2,60, " OK-> scan    UP-> exit");
   u8g2.sendBuffer();
   u8g2.clearBuffer();	
   delay(2000);
 
-  while(!flag_ow_scan_to_start){
+  while(1){
 
-    buttonUp.tick();
-    buttonDown.tick();
-    buttonEnter.tick(); 
 
     if(buttonEnter.isClick()){
       flag_ow_scan_to_start = true;
+      break;
     }
 
     if(buttonEnter.isHold()){
@@ -632,7 +640,7 @@ void fnPrintMenu1WireScanner(void){
     }
 
     if(buttonUp.isClick()){
-      
+      break;
     }
 
     if(buttonDown.isClick()){
@@ -642,8 +650,10 @@ void fnPrintMenu1WireScanner(void){
   }
 
   uint8_t address[8];
-  String tempString = "";
-  String tempString2 = "";
+
+  u8g2.drawStr(2, 10, "ID1: ");
+  u8g2.drawStr(2, 25, "ID2: ");
+  u8g2.drawStr(2, 40, "ID3: ");
 
   if (oneWire.search(address))
   {
@@ -654,69 +664,75 @@ void fnPrintMenu1WireScanner(void){
               switch (temp_sensors_data.num_founded_sensors)
               {
               case 1:
-                    for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
-                    {
-                          temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
-                          thermometerID_1[j] = address[j];
-                          tempString2 = String(address[j], HEX);
-                          tempString += tempString2;
-                          if (j < 7)
-                                tempString += ". ";
-                    }
-                    tempString.toCharArray(buffer, sizeof(tempString));
-                    u8g2.drawStr(20,20, buffer); //   myNex.writeStr("p9t2.txt", tempString); //
-                    tempString = "";
-                    tempString2 = "";
-                    break;
+                for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
+                {
+                  temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
+                  thermometerID_1[j] = address[j];
+                } 
+                break;
 
               case 2:
-                    for (uint8_t j = 0; j < 8; j++)
-                    {
-                          temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
-                          thermometerID_2[j] = address[j];
-                          tempString2 = String(address[j], HEX);
-                          tempString += tempString2;
-                          if (j < 7)
-                                tempString += ". ";
-                    }
-                    tempString.toCharArray(buffer, sizeof(tempString));
-                    u8g2.drawStr(20,30, buffer); //myNex.writeStr("p9t3.txt", tempString);
-                    tempString = "";
-                    tempString2 = "";
-                    break;
+                for (uint8_t j = 0; j < 8; j++)
+                {
+                  temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
+                  thermometerID_2[j] = address[j];                         
+                } 
+                break;
+
               case 3:
-                    for (uint8_t j = 0; j < 8; j++)
-                    {
-                          temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][j] = address[j];
-                          thermometerID_3[j] = address[j];
-                          tempString2 = String(address[j], HEX);
-                          tempString += tempString2;
-                          if (j < 7)
-                                tempString += ". ";
-                    }
-                    tempString.toCharArray(buffer, sizeof(tempString));
-                    u8g2.drawStr(20,40, buffer); //myNex.writeStr("p9t4.txt", tempString);
-                    tempString = "";
-                    tempString2 = "";
-                    break;
+                for (uint8_t j = 0; j < 8; j++)
+                {
+                  temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][j] = address[j];
+                  thermometerID_3[j] = address[j];                                                    
+                }
+
+                break;
 
               default:
-                    break;
+                break;
+
               }
 
               if (temp_sensors_data.num_founded_sensors > 3){
-                
-                u8g2.drawStr(30,40, "Founded >3 sensors");
+                u8g2.clearBuffer();
+                u8g2.drawStr(10,40, "Founded >3 sensors");
                 break; // если найдено больше трёх датчиков - выходим из цикла
               }
 
         } while (oneWire.search(address));
   }
 
-  if(temp_sensors_data.num_founded_sensors == 0)u8g2.drawStr(20,40, "No sensors found");
+
+
+  if(temp_sensors_data.num_founded_sensors != 0 && temp_sensors_data.num_founded_sensors<4){
+
+    sprintf(buffer,"%x%x%x%x%x%x%x%x", thermometerID_1[0],thermometerID_1[1],thermometerID_1[2],thermometerID_1[3],thermometerID_1[4],thermometerID_1[5],thermometerID_1[6],thermometerID_1[7]);
+    Serial.println(buffer);
+    u8g2.drawStr(30,10, buffer); //  
+
+    sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_2[0],thermometerID_2[1],thermometerID_2[2],thermometerID_2[3],thermometerID_2[4],thermometerID_2[5],thermometerID_2[6],thermometerID_2[7]);
+    Serial.println(buffer);
+    u8g2.drawStr(30,25, buffer);
+
+    sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_3[0],thermometerID_3[1],thermometerID_3[2],thermometerID_3[3],thermometerID_3[4],thermometerID_3[5],thermometerID_3[6],thermometerID_3[7]);
+    Serial.println(buffer);
+    u8g2.drawStr(30,40, buffer); 
+
+    u8g2.drawStr(2,60, " OK-> save    UP-> exit");
+
+  } 
+  
+    if(temp_sensors_data.num_founded_sensors == 0){
+      u8g2.clearBuffer();
+      u8g2.drawStr(20,40, "No sensors found");
+    }
   
   u8g2.sendBuffer();
 
+  
+
+  Serial.println(temp_sensors_data.num_founded_sensors);
+  
   delay(5000);
   
 
