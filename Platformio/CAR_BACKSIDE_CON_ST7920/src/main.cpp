@@ -16,22 +16,23 @@
 
 U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R2, /* CS=*/LCD_CS , /* reset=*/ LCD_RESET);
 
-//---------кнопки--------------------------
+//-------- Butttons --------------------------
 GButton buttonUp(BUTTON_UP);
 GButton buttonDown(BUTTON_DOWN);
 GButton buttonEnter(BUTTON_ENTER_ESC);
 
-//--------------
-GTimer timerSelectedFrameBlink(MS);
+//-------- Timers ----------------------------
+GTimer timerBlink(MS);
 
-//----------------------------------------------------------------------------------------------------------
-
+//------ Functions -------------------------------------------------------------------------
 void fnPrintSelectionFrame(uint8_t menu_pointer);
 void fnPrintMenuItemName(uint8_t num, uint8_t num_line, const char* const* names);
 void printMenuSetpoints(void);
 void fnPrintMainView(void);
 void fnPrintMenuParamView(void);
 void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line);
+void fnPrintMenu1WireScanner(void);
+
 
 void setup() {
 
@@ -48,7 +49,9 @@ void setup() {
 
   menu_mode = MENU_MAIN_VIEW;
 
-  timerSelectedFrameBlink.setInterval(500); 
+  timerBlink.setInterval(500); 
+
+  fnPrintMenu1WireScanner();
 
 }
 
@@ -126,7 +129,8 @@ void loop() {
           menu_mode = MENU_MAIN_VIEW;
           menu_current_item = 0;
         }
-      break;
+
+        break;
 
       case MENU_SETPOINTS_EDIT_MODE:
 
@@ -144,8 +148,9 @@ void loop() {
 
         if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS;
 
-      break;
+        break;
       
+
       default:
       
       break;
@@ -168,7 +173,7 @@ void fnPrintSelectionFrame(uint8_t item_pointer) {
   else n = item_pointer % display_num_lines;
 
   if(menu_mode == MENU_SETPOINTS_EDIT_MODE){
-    if(timerSelectedFrameBlink.isReady())flag_blink = !flag_blink;
+    if(timerBlink.isReady())flag_blink = !flag_blink;
     if(flag_blink)u8g2.drawRFrame(0, n*(LCD_FONT_HIGHT + LCD_LINE_SPACER), display_width-2, (LCD_FONT_HIGHT + LCD_LINE_SPACER), 2);
     else{
       u8g2.setDrawColor(0);
@@ -496,6 +501,7 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
   case 1: 
     sprintf(buffer,"%uL", main_data.water_level_liter);
     break;
+
   case 2:
     float_m = main_data.outside_temperature * 10;
     float_n = float_m%10;
@@ -546,9 +552,11 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
   case 10:
     sprintf(buffer,"%1u", main_data.low_washer_water_level);
     break;
+
   case 11:
     sprintf(buffer,"%1u", main_data.converter_output_state);
     break;
+
   case 12:
     sprintf(buffer,"%1u", main_data.fridge_output_state);
     break;
@@ -556,9 +564,11 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
   case 13:
     sprintf(buffer,"%1u", main_data.pump_output_state);
     break;
+
   case 14:
     
     break;
+
   case 15:
     
     break;
@@ -578,8 +588,6 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
     
     break;
     
-    break;
-  
   default:
     break;
   }
@@ -588,4 +596,34 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 }
 
 
-//-------------------
+//------  Функция печати меню сканнера 1Wire --------------------------------------------
+void fnPrintMenu1WireScanner(void){
+
+  while(1){
+
+    buttonUp.tick();
+    buttonDown.tick();
+    buttonEnter.tick(); 
+
+    if(buttonEnter.isClick()){
+      
+    }
+
+    if(buttonEnter.isHold()){
+      
+    }
+
+    if(buttonUp.isClick()){
+      
+    }
+
+    if(buttonDown.isClick()){
+      
+    }
+
+    
+
+  }
+
+
+}

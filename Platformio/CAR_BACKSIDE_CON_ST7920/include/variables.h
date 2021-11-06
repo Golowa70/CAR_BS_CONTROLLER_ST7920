@@ -77,17 +77,16 @@ struct SetpointsStruct { // структура для уставок
   
 } default_setpoints_data, old_setpoints_data;
 
-struct {
+struct OneWireDataStruct {
 
   uint8_t sensors_ID_array[MAX_TEMP_SENSORS][8];
-  uint8_t num_founded_temp_sensors; //   
+  uint8_t num_founded_sensors; //   
     
 }temp_sensors_data;
 
 
-union 
-{ 
-  
+union {  
+   
   SetpointsStruct setpoints_data;
   uint8_t SetpointsArray[35];
 
@@ -239,12 +238,11 @@ struct MyData
    255,255,255,255,255,
   };
   
-  int8_t menu_pointer = 0; // Переменная указатель на текущий пункт меню
-  uint8_t menu_mode = MENU_SETPOINTS;
-  bool flag_blink = false;
-
-  uint8_t menu_current_item;
+  uint8_t menu_current_item = 0; // Переменная указатель на текущий пункт меню
   uint8_t menu_current_page = 0;
+  uint8_t menu_mode = MENU_SETPOINTS;
+  bool flag_blink = false; // флаг для мигания чего либо на экране
+
   
 //***********************************************************************************
 

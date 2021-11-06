@@ -144,6 +144,7 @@
 #define MENU_SETPOINTS                  2
 #define MENU_SETPOINTS_EDIT_MODE        3
 
+
 #define LCD_LINE_SPACER                 4
 #define LCD_FONT_HIGHT                  8
 #define PARAM_LENGHT                    4
