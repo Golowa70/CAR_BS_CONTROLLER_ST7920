@@ -2,6 +2,8 @@
 #include <U8g2lib.h>
 #include "GyverButton.h"
 #include "GyverTimer.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 #include "defines.h"
 #include "variables.h"
@@ -15,6 +17,13 @@
 #endif
 
 U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R2, /* CS=*/LCD_CS , /* reset=*/ LCD_RESET);
+
+//--------- one wire ---------------------------------------------------------------
+#define TEMPERATURE_PRECISION 9                                  // точность измерения температуры 9 бит
+OneWire oneWire(ONE_WIRE_PIN);                                   // порт шины 1WIRE
+DallasTemperature temp_sensors(&oneWire);                        // привязка библиотеки DallasTemperature к библиотеке OneWire
+DeviceAddress thermometerID_1, thermometerID_2, thermometerID_3; // резервируем адреса для трёх датчиков
+
 
 //-------- Butttons --------------------------
 GButton buttonUp(BUTTON_UP);
@@ -599,6 +608,13 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 //------  Функция печати меню сканнера 1Wire --------------------------------------------
 void fnPrintMenu1WireScanner(void){
 
+  u8g2.clearBuffer();					// 
+  u8g2.setFont(u8g2_font_ncenB08_tr);	// 
+  u8g2.println("OneWire scanner");
+  u8g2.sendBuffer();
+  u8g2.clearBuffer();	
+
+
   while(1){
 
     buttonUp.tick();
@@ -619,6 +635,73 @@ void fnPrintMenu1WireScanner(void){
 
     if(buttonDown.isClick()){
       
+    }
+
+
+    uint8_t address[8];
+    String tempString = "";
+    String tempString2 = "";
+
+    if (oneWire.search(address))
+    {
+          do
+          {
+                temp_sensors_data.num_founded_sensors++;
+
+                switch (temp_sensors_data.num_founded_sensors)
+                {
+                case 1:
+                      for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
+                      {
+                            temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
+                            thermometerID_1[j] = address[j];
+                            tempString2 = String(address[j], HEX);
+                            tempString += tempString2;
+                            if (j < 7)
+                                  tempString += ". ";
+                      }
+                      u8g2.drawStr(30,20, tempString); //   myNex.writeStr("p9t2.txt", tempString); //
+                      tempString = "";
+                      tempString2 = "";
+                      break;
+
+                case 2:
+                      for (uint8_t j = 0; j < 8; j++)
+                      {
+                            setpoints_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
+                            thermometerID_2[j] = address[j];
+                            tempString2 = String(address[j], HEX);
+                            tempString += tempString2;
+                            if (j < 7)
+                                  tempString += ". ";
+                      }
+                      u8g2.drawStr(30,40, tempString); //myNex.writeStr("p9t3.txt", tempString);
+                      tempString = "";
+                      tempString2 = "";
+                      break;
+                case 3:
+                      for (uint8_t j = 0; j < 8; j++)
+                      {
+                            setpoints_data.sensors_ID_array[SPARE_SENSOR - 1][j] = address[j];
+                            thermometerID_3[j] = address[j];
+                            tempString2 = String(address[j], HEX);
+                            tempString += tempString2;
+                            if (j < 7)
+                                  tempString += ". ";
+                      }
+                      myNex.writeStr("p9t4.txt", tempString);
+                      tempString = "";
+                      tempString2 = "";
+                      break;
+
+                default:
+                      break;
+                }
+
+                if (setpoints_data.num_found_temp_sensors > 3)
+                      break; // если найдено больше трёх датчиков - выходим из цикла
+
+          } while (oneWire.search(address));
     }
 
     
