@@ -43,6 +43,7 @@ void fnPrintMainView(void);
 void fnPrintMenuParamView(void);
 void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line);
 void fnPrintMenu1WireScanner(void);
+void fnOneWireScanner(void);
 
 //обработчик прерывания от Timer3 
 ISR(TIMER3_A)
@@ -74,7 +75,8 @@ void setup() {
 
 
   digitalWrite(SENSORS_SUPPLY_5v, HIGH);
-  fnPrintMenu1WireScanner();
+  //fnPrintMenu1WireScanner();
+  fnOneWireScanner();
 
 }
 
@@ -614,7 +616,7 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 }
 
 
-//------  Функция печати меню сканнера 1Wire --------------------------------------------
+//------  Функция печати меню сканнера 1Wire (old) --------------------------------------------
 void fnPrintMenu1WireScanner(void){
 
   char buffer [32] = {0,};
@@ -735,6 +737,161 @@ void fnPrintMenu1WireScanner(void){
   
   delay(5000);
   
+}
+
+
+//-------1Wire scanner ------------------------------------------------------
+void fnOneWireScanner(void){
+
+  uint8_t address[8] = {0,};
+  char buffer [32] = {0,};
+
+  enum fsm_state {start, scanner, founded_no_more_three, not_founded, founded_more_three, save, exit};
+  enum fsm_state current_state = start;
+  bool flag_scanned = false;
+ 
+  while(!flag_scanned){
+
+    switch (current_state)
+    {
+    case start:
+      u8g2.clearBuffer();					// 
+      u8g2.setFont(u8g2_font_ncenB08_tr);	// 
+      u8g2.drawStr(10,10, "OneWire scanner");
+      u8g2.drawStr(2,60, " UP-> scan    D-> exit");
+      u8g2.sendBuffer();
+      if(buttonUp.isClick())current_state = scanner;
+      if(buttonDown.isClick())current_state = exit;
+      break;
+    
+    case scanner:
+
+      temp_sensors_data.num_founded_sensors = 0;
+
+      if (oneWire.search(address)){
+        do
+        {
+          temp_sensors_data.num_founded_sensors++;
+
+          switch (temp_sensors_data.num_founded_sensors){
+            case 1:
+              for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
+              {
+                temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
+                thermometerID_1[j] = address[j];
+              } 
+              break;
+
+            case 2:
+              for (uint8_t j = 0; j < 8; j++)
+              {
+                temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
+                thermometerID_2[j] = address[j];                         
+              } 
+              break;
+
+            case 3:
+              for (uint8_t j = 0; j < 8; j++)
+              {
+                temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][j] = address[j];
+                thermometerID_3[j] = address[j];                                                    
+              }
+
+              break;
+
+            default:
+              break;
+
+          }
+
+
+        } while (oneWire.search(address));
+      }
+
+      if(temp_sensors_data.num_founded_sensors == 0)current_state = not_founded;
+      else if(temp_sensors_data.num_founded_sensors <= 3)current_state = founded_no_more_three;
+      else if(temp_sensors_data.num_founded_sensors > 3)current_state = founded_more_three;
+
+      Serial.println(temp_sensors_data.num_founded_sensors);
+
+      break;
+
+    case founded_no_more_three:
+
+      u8g2.clearBuffer();				
+      sprintf(buffer,"Founded %d sensors", temp_sensors_data.num_founded_sensors);
+      u8g2.drawStr(20,20, buffer);
+      u8g2.drawStr(2,60, " OK-> cont    D-> exit");
+      u8g2.sendBuffer();
+      if(buttonEnter.isClick())current_state = save;
+      if(buttonDown.isClick())current_state = exit;
+      break;
+    
+    case not_founded:
+
+      u8g2.clearBuffer();				
+      u8g2.drawStr(15,20, "No sensors founded");
+      u8g2.drawStr(2,60, " UP-> scan    D-> exit");
+      u8g2.sendBuffer();
+      if(buttonUp.isClick())current_state = scanner;
+      if(buttonDown.isClick())current_state = exit;
+      break;
+
+    case founded_more_three:
+    
+      u8g2.clearBuffer();				
+      u8g2.drawStr(30,40, "founded > 3");
+      u8g2.drawStr(2,60, " UP-> scan    D-> exit");
+      u8g2.sendBuffer();
+      if(buttonUp.isClick())current_state = scanner;
+      if(buttonDown.isClick())current_state = exit;
+      break;
+
+    case save:
+
+      u8g2.clearBuffer();	
+
+      u8g2.drawStr(2, 10, "ID1: ");
+      u8g2.drawStr(2, 25, "ID2: ");
+      u8g2.drawStr(2, 40, "ID3: ");
+
+      sprintf(buffer,"%x%x%x%x%x%x%x%x", thermometerID_1[0],thermometerID_1[1],thermometerID_1[2],thermometerID_1[3],thermometerID_1[4],thermometerID_1[5],thermometerID_1[6],thermometerID_1[7]);
+      Serial.println(buffer);
+      u8g2.drawStr(30,10, buffer); //  
+
+      sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_2[0],thermometerID_2[1],thermometerID_2[2],thermometerID_2[3],thermometerID_2[4],thermometerID_2[5],thermometerID_2[6],thermometerID_2[7]);
+      Serial.println(buffer);
+      u8g2.drawStr(30,25, buffer);
+
+      sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_3[0],thermometerID_3[1],thermometerID_3[2],thermometerID_3[3],thermometerID_3[4],thermometerID_3[5],thermometerID_3[6],thermometerID_3[7]);
+      Serial.println(buffer);
+      u8g2.drawStr(30,40, buffer); 			
+      
+      u8g2.drawStr(2,60, " OK-> save    D-> exit");
+      u8g2.sendBuffer();
+
+      if(buttonEnter.isClick()){
+        
+        u8g2.clearBuffer();				
+        u8g2.drawStr(40,20, "SAVED!");
+        u8g2.sendBuffer();
+        delay(2000);    
+        current_state = exit;
+      }
+
+      if(buttonDown.isClick())current_state = exit;
+      break;
+
+    case exit:
+      flag_scanned = true;
+      break;
+
+    default:
+      break;
+    }
+  }
 
 
 }
+
+//----------------------------------------------------------------
