@@ -73,25 +73,29 @@ struct SetpointsStruct { // структура для уставок
   uint8_t spare_2;
   uint8_t spare_3;
   uint8_t spare_4;
-  //uint8_t water_level_liter_memory;
+
+  uint8_t key;
+  uint8_t crc8;
   
-} default_setpoints_data, old_setpoints_data;
+}default_setpoints_data;
+
+
 
 struct OneWireDataStruct {
 
   uint8_t sensors_ID_array[MAX_TEMP_SENSORS][8];
-  uint8_t num_founded_sensors; //   
+  uint8_t num_saved_sensors; //   
     
-}temp_sensors_data;
+}temp_sensors_data; // 25 byte
 
 
 union {  
    
   SetpointsStruct setpoints_data;
-  uint8_t SetpointsArray[35];
+  uint8_t SetpointsArray[37];
 
-}SetpointsUnion;
-// 35 byte
+}SetpointsUnion; // 37 byte
+
 //********** end setpoints variables ******************************************************************
 
 //*********** Main data *******************************************************************************
@@ -138,14 +142,14 @@ struct MyData
   const char p3[] PROGMEM = " Temp inside:";
   const char p4[] PROGMEM = " Temp fridge:"; 
   const char p5[] PROGMEM = " Sensors V:";
-  const char p6[] PROGMEM = " Door:";
-  const char p7[] PROGMEM = " Prx sensor:";
-  const char p8[] PROGMEM = " IGN";
-  const char p9[] PROGMEM = " LWW level:";
-  const char p10[] PROGMEM = " Conv relay:";
-  const char p11[] PROGMEM = " Fridge relay:";
-  const char p12[] PROGMEM = " Pump relay:";
-  const char p13[] PROGMEM = " Spare:";
+  const char p6[] PROGMEM = " RS Resistance:";
+  const char p7[] PROGMEM = " Door:";
+  const char p8[] PROGMEM = " Prx sensor:";
+  const char p9[] PROGMEM = " IGN";
+  const char p10[] PROGMEM = " LWW level:";
+  const char p11[] PROGMEM = " Conv relay:";
+  const char p12[] PROGMEM = " Fridge relay:";
+  const char p13[] PROGMEM = " Pump relay:";
   const char p14[] PROGMEM = " Spare:";
   const char p15[] PROGMEM = " 1Wire error :";
   const char p16[] PROGMEM = " Water sens error:";
@@ -288,6 +292,7 @@ struct Alarms
 } present_alarms,old_alarms;
 
 
+//************ Icons ***********************************************************
 
 static unsigned char water_level_50x50[] = {
    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -320,5 +325,13 @@ static unsigned char water_level_50x50[] = {
    0xe0, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x03, 0x00, 0x00, 0x00,
    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
    0x00, 0x00 };
+
+   //***************************************************************************
+
+   enum Modes{off,on,auto_U,auto_T,auto_UT};
+   enum Modes converter_mode = off;
+   enum Modes fridge_mode = off;
+
+   
 
 #endif

@@ -19,28 +19,6 @@
 #define SENS_SUPPLY_CHECK_START_DELAY 2000  //ms  
 
 
-
-//menu pages
-#define MAIN_PAGE              0
-#define WATER_PAGE             1
-#define IOSTATUS_PAGE          2
-#define SETTINGS_PAGE          3
-#define ONEWIRESET_PAGE        4
-#define WATERSET_PAGE          5
-#define CONVSET_PAGE           6
-#define LIGHTSET_PAGE          7
-#define PJONSET_PAGE           8
-#define ONEWIRESCANNER_PAGE    9
-#define MODBUSSET_PAGE        10
-#define BASESET_PAGE          11
-//#define INIT_PAGE             12
-//#define LOGO_0_PAGE           13
-//#define LOGO_1_PAGE           14
-//#define LOGO_2_PAGE           15
-#define ERROR_LOG_PAGE        0X10
-#define TIMERS_PAGE           0x11
-#define MAX_PAGES             20 
-
 //modes
 #define OFF_MODE               0
 #define ON_MODE                1
@@ -55,11 +33,12 @@
 #define MAX_RESISTANCE          255
 
 //eeprom
-#define EEPROM_SETPOINTS_ADDRESS   0
-#define EEPROM_ERROR_LOG_ADDRES    100
-#define MAGIC_KEY                  0xAC   // 0xAC ключь для определения записаны ли уставки в память EEPROM
-//#define MAGIC_KEY_PART_1          0x1234567   // вариант с двумя частями один в начале второй в конце
-//#define MAGIC_KEY_PART_2          0x7654321
+#define EEPROM_SETPOINTS_ADDRESS   0x00
+#define EEPROM_1WIRE_ADDRESS       0x40
+#define EEPROM_ERROR_LOG_ADDRES    0x80
+
+#define EEPROM_KEY         0x12  //ключь для определения записаны ли уставки в память EEPROM или это первая запись
+
 
 //communications
 #define PJON_BUS_PIN         3   // new 
@@ -91,8 +70,8 @@
 #define WATER_FLOW_SENSOR                    5       //YF-S201 (пока не используется)
 #define BUTTON_ON_BOARD                     10       // кнопка на плате (пока не используется)
 #define POWER_OK_FROM_ADM705                41       //
-#define BUTTON_UP                           35
-#define BUTTON_DOWN                         36
+#define BUTTON_UP                           36
+#define BUTTON_DOWN                         35
 #define BUTTON_ENTER_ESC                    37
 //#define ENCODER_SW							35
 //#define ENCODER_DT							36
@@ -150,5 +129,11 @@
 #define PARAM_LENGHT                    4
 #define ITEM_MAX_CHARS                  17
 
+//water sensor types
+#define PJON_SENSOR_TYPE               0
+#define RES_SENSOR_TYPE                1
+
+//water tank default capacity
+#define WATER_TANK_CAPACITY             35
 
 #endif

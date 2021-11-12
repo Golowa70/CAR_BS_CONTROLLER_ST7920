@@ -5,6 +5,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <GyverTimers.h>
+#include <EEPROMex.h>
+#include <EEPROMVar.h>
 
 
 #include "defines.h"
@@ -34,6 +36,8 @@ GButton buttonEnter(BUTTON_ENTER_ESC);
 
 //-------- Timers ----------------------------
 GTimer timerBlink(MS);
+GTimer timerPumpOff(MS);
+GTimer timerPeriodSensUpdate(MS);
 
 //------ Functions -------------------------------------------------------------------------
 void fnPrintSelectionFrame(uint8_t menu_pointer);
@@ -44,6 +48,14 @@ void fnPrintMenuParamView(void);
 void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line);
 void fnPrintMenu1WireScanner(void);
 void fnOneWireScanner(void);
+bool fnEEpromSetpointsInit(void);
+bool fnEEpromWriteDefaultSetpoints(void);
+bool fnEEpromInit(void);
+void fnPumpControl(MyData &data, SetpointsStruct &setpoints);
+uint8_t fnDebounce(uint8_t sample);
+void fnInputsUpdate(void);
+void fnOutputsUpdate(MyData &data);  // функция обновления выходов
+void fnTempSensorsUpdate(void);
 
 //обработчик прерывания от Timer3 
 ISR(TIMER3_A)
@@ -52,36 +64,54 @@ ISR(TIMER3_A)
   buttonDown.tick();
   buttonEnter.tick();
 }
-
+//**********************************************************************************
 
 void setup() {
 
   Serial.begin(115200);
-  fnIOInit();
   u8g2.begin();
-  Timer3.setPeriod(10000); // Устанавливаем период таймера 500000 мкс -> 0.5 гц (сброс внешнего WDT)
-  Timer3.enableISR(CHANNEL_A);
-
+  u8g2.setFont(u8g2_font_ncenB08_tr);
   display_height = u8g2.getDisplayHeight();
   display_width = u8g2.getDisplayWidth();
   display_num_lines = display_height / (LCD_FONT_HIGHT + LCD_LINE_SPACER);
-  Serial.println(display_height);
-  Serial.println(display_width);
-  Serial.println(display_num_lines);
+  fnDefaultSetpointsInit();
+  fnIOInit();
 
+  if(fnEEpromInit()){
+    u8g2.clearBuffer();
+    u8g2.drawStr(40,30,"READY!");
+    u8g2.sendBuffer();
+    delay(1000);
+  } 
+  else {
+    u8g2.clearBuffer();
+    u8g2.drawStr(40,30,"ERROR!");
+    u8g2.sendBuffer();
+    memcpy(&SetpointsUnion.setpoints_data, &default_setpoints_data, sizeof(SetpointsUnion.setpoints_data));//
+    delay(1000);    
+  }
+  
+  Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
+  Timer3.enableISR(CHANNEL_A);
+
+  if(!digitalRead(BUTTON_DOWN) && !digitalRead(BUTTON_UP)){
+    fnOneWireScanner();
+  }
+  
   menu_mode = MENU_MAIN_VIEW;
 
   timerBlink.setInterval(500); 
-
+  timerPeriodSensUpdate.setInterval(500);
 
   digitalWrite(SENSORS_SUPPLY_5v, HIGH);
-  //fnPrintMenu1WireScanner();
-  fnOneWireScanner();
+  
 
 }
 
 void loop() {
   
+  fnInputsUpdate();
+  digitalWrite(SENSORS_SUPPLY_5v, HIGH);
 
   //меню----------------------------------------------------------------------
     //определение текущей страницы меню
@@ -114,12 +144,12 @@ void loop() {
         fnPrintMenuParamView();
 
         if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
-          menu_current_item = constrain(menu_current_item + display_num_lines , 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
+          menu_current_item = constrain(menu_current_item - display_num_lines , 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
           Serial.println(menu_current_item);
         }
 
         if (buttonDown.isClick() or buttonDown.isHold()) {   
-          menu_current_item = constrain(menu_current_item - display_num_lines, 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); 
+          menu_current_item = constrain(menu_current_item + display_num_lines, 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); 
           Serial.println(menu_current_item);
         }
 
@@ -134,12 +164,12 @@ void loop() {
 
         printMenuSetpoints();
 
-        if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
+        if (buttonDown.isClick() or buttonDown.isHold()) {         // Если кнопку нажали или удерживают
           menu_current_item = constrain(menu_current_item + 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
           Serial.println(menu_current_item);
         }
 
-        if (buttonDown.isClick() or buttonDown.isHold()) {   
+        if (buttonUp.isClick() or buttonUp.isHold()) {   
           menu_current_item = constrain(menu_current_item - 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); 
           Serial.println(menu_current_item);
         }
@@ -157,16 +187,20 @@ void loop() {
         printMenuSetpoints();
 
         if (buttonUp.isClick() or buttonUp.isHold()){
-          SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]-1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
-          Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
-        }
-
-        if (buttonDown.isClick() or buttonDown.isHold()){
           SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]+1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
           Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
         }
 
-        if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS;
+        if (buttonDown.isClick() or buttonDown.isHold()){
+          SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]-1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
+          Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
+        }
+
+        if(buttonEnter.isClick()){
+          EEPROM.updateBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data);
+          Serial.println("eeprom updated!");
+          menu_mode = MENU_SETPOINTS;
+        }
 
         break;
       
@@ -178,8 +212,9 @@ void loop() {
     }
   //конец меню
 
-
-
+  fnPumpControl(main_data, SetpointsUnion.setpoints_data);
+  fnTempSensorsUpdate();
+  fnOutputsUpdate(main_data);
 
 }
 
@@ -437,24 +472,23 @@ void fnPrintMainView(void){
   sprintf(buffer,"%d.%dv",float_m, float_n);
   u8g2.drawStr(102, 8, buffer);
 
-  main_data.inside_temperature = 24.5;
-  float_m = main_data.inside_temperature * 10;
-  float_n = float_m%10;
-  float_m = float_m/10;
-  sprintf(buffer,">%d.%dC",float_m, float_n);
+  sprintf(buffer,"> %dC", (int)main_data.inside_temperature);
   u8g2.drawStr(98, 18, buffer);
 
-  main_data.outside_temperature = 28.7;
-  float_m = main_data.outside_temperature * 10;
-  float_n = float_m%10;
-  float_m = float_m/10;
-  sprintf(buffer,"<%d.%dC",float_m, float_n);
+  sprintf(buffer,"< %dC", (int)main_data.outside_temperature);
   u8g2.drawStr(98, 28, buffer);
 
-  u8g2.drawBox(64,1,21,8);
-  u8g2.setDrawColor(0);
-  u8g2.drawStr(65, 8, "PUMP");
-  u8g2.setDrawColor(1);
+  if(main_data.pump_output_state){
+    u8g2.drawBox(64,1,21,8);
+    u8g2.setDrawColor(0);
+    u8g2.drawStr(65, 8, "PUMP");
+    u8g2.setDrawColor(1);
+  }
+  else{
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(64,1,21,8);
+    u8g2.setDrawColor(1);
+  }
 
   u8g2.drawBox(64,11,21,8);
   u8g2.setDrawColor(0);
@@ -616,139 +650,25 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 }
 
 
-//------  Функция печати меню сканнера 1Wire (old) --------------------------------------------
-void fnPrintMenu1WireScanner(void){
-
-  char buffer [32] = {0,};
-
-  u8g2.clearBuffer();					// 
-  u8g2.setFont(u8g2_font_ncenB08_tr);	// 
-  u8g2.drawStr(10,10, "OneWire scanner");
-  u8g2.drawStr(2,60, " OK-> scan    UP-> exit");
-  u8g2.sendBuffer();
-  u8g2.clearBuffer();	
-  delay(2000);
-
-  while(1){
-
-
-    if(buttonEnter.isClick()){
-      flag_ow_scan_to_start = true;
-      break;
-    }
-
-    if(buttonEnter.isHold()){
-      
-    }
-
-    if(buttonUp.isClick()){
-      break;
-    }
-
-    if(buttonDown.isClick()){
-      
-    }
-
-  }
-
-  uint8_t address[8];
-
-  u8g2.drawStr(2, 10, "ID1: ");
-  u8g2.drawStr(2, 25, "ID2: ");
-  u8g2.drawStr(2, 40, "ID3: ");
-
-  if (oneWire.search(address))
-  {
-        do
-        {
-              temp_sensors_data.num_founded_sensors++;
-
-              switch (temp_sensors_data.num_founded_sensors)
-              {
-              case 1:
-                for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
-                {
-                  temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
-                  thermometerID_1[j] = address[j];
-                } 
-                break;
-
-              case 2:
-                for (uint8_t j = 0; j < 8; j++)
-                {
-                  temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
-                  thermometerID_2[j] = address[j];                         
-                } 
-                break;
-
-              case 3:
-                for (uint8_t j = 0; j < 8; j++)
-                {
-                  temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][j] = address[j];
-                  thermometerID_3[j] = address[j];                                                    
-                }
-
-                break;
-
-              default:
-                break;
-
-              }
-
-              if (temp_sensors_data.num_founded_sensors > 3){
-                u8g2.clearBuffer();
-                u8g2.drawStr(10,40, "Founded >3 sensors");
-                break; // если найдено больше трёх датчиков - выходим из цикла
-              }
-
-        } while (oneWire.search(address));
-  }
-
-
-
-  if(temp_sensors_data.num_founded_sensors != 0 && temp_sensors_data.num_founded_sensors<4){
-
-    sprintf(buffer,"%x%x%x%x%x%x%x%x", thermometerID_1[0],thermometerID_1[1],thermometerID_1[2],thermometerID_1[3],thermometerID_1[4],thermometerID_1[5],thermometerID_1[6],thermometerID_1[7]);
-    Serial.println(buffer);
-    u8g2.drawStr(30,10, buffer); //  
-
-    sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_2[0],thermometerID_2[1],thermometerID_2[2],thermometerID_2[3],thermometerID_2[4],thermometerID_2[5],thermometerID_2[6],thermometerID_2[7]);
-    Serial.println(buffer);
-    u8g2.drawStr(30,25, buffer);
-
-    sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_3[0],thermometerID_3[1],thermometerID_3[2],thermometerID_3[3],thermometerID_3[4],thermometerID_3[5],thermometerID_3[6],thermometerID_3[7]);
-    Serial.println(buffer);
-    u8g2.drawStr(30,40, buffer); 
-
-    u8g2.drawStr(2,60, " OK-> save    UP-> exit");
-
-  } 
-  
-    if(temp_sensors_data.num_founded_sensors == 0){
-      u8g2.clearBuffer();
-      u8g2.drawStr(20,40, "No sensors found");
-    }
-  
-  u8g2.sendBuffer();
-
-  
-
-  Serial.println(temp_sensors_data.num_founded_sensors);
-  
-  delay(5000);
-  
-}
-
-
 //-------1Wire scanner ------------------------------------------------------
+
 void fnOneWireScanner(void){
 
+  Serial.println("fnOneWireScanner");
+
   uint8_t address[8] = {0,};
+  uint8_t tmp_thermometerID_1[8] = {0,};
+  uint8_t tmp_thermometerID_2[8] = {0,};
+  uint8_t tmp_thermometerID_3[8] = {0,};
   char buffer [32] = {0,};
+  uint8_t num_founded_sensors = 0;
 
   enum fsm_state {start, scanner, founded_no_more_three, not_founded, founded_more_three, save, exit};
   enum fsm_state current_state = start;
   bool flag_scanned = false;
+
+  digitalWrite(SENSORS_SUPPLY_5v, HIGH);
+  delay(200);
  
   while(!flag_scanned){
 
@@ -757,44 +677,48 @@ void fnOneWireScanner(void){
     case start:
       u8g2.clearBuffer();					// 
       u8g2.setFont(u8g2_font_ncenB08_tr);	// 
-      u8g2.drawStr(10,10, "OneWire scanner");
-      u8g2.drawStr(2,60, " UP-> scan    D-> exit");
+      u8g2.drawStr(20,10, "OneWire scanner");
+      u8g2.setFont(u8g2_font_6x10_tr);
+      sprintf(buffer,"Saved %d sensors", temp_sensors_data.num_saved_sensors);
+      u8g2.drawStr(20,30, buffer);
+      u8g2.drawStr(7,50, "OK-> scan");
+      u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();
-      if(buttonUp.isClick())current_state = scanner;
+      if(buttonEnter.isClick())current_state = scanner;
       if(buttonDown.isClick())current_state = exit;
       break;
     
     case scanner:
 
-      temp_sensors_data.num_founded_sensors = 0;
+      num_founded_sensors = 0;
 
       if (oneWire.search(address)){
         do
         {
-          temp_sensors_data.num_founded_sensors++;
+          num_founded_sensors++;
 
-          switch (temp_sensors_data.num_founded_sensors){
+          switch (num_founded_sensors){
             case 1:
               for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
               {
-                temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
-                thermometerID_1[j] = address[j];
+                //temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
+                tmp_thermometerID_1[j] = address[j];
               } 
               break;
 
             case 2:
               for (uint8_t j = 0; j < 8; j++)
               {
-                temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
-                thermometerID_2[j] = address[j];                         
+                //temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
+                tmp_thermometerID_2[j] = address[j];                         
               } 
               break;
 
             case 3:
               for (uint8_t j = 0; j < 8; j++)
               {
-                temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][j] = address[j];
-                thermometerID_3[j] = address[j];                                                    
+                //temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][j] = address[j];
+                tmp_thermometerID_3[j] = address[j];                                                    
               }
 
               break;
@@ -804,34 +728,42 @@ void fnOneWireScanner(void){
 
           }
 
-
         } while (oneWire.search(address));
       }
 
-      if(temp_sensors_data.num_founded_sensors == 0)current_state = not_founded;
-      else if(temp_sensors_data.num_founded_sensors <= 3)current_state = founded_no_more_three;
-      else if(temp_sensors_data.num_founded_sensors > 3)current_state = founded_more_three;
+      if(num_founded_sensors == 0)current_state = not_founded;
+      else if(num_founded_sensors <= 3)current_state = founded_no_more_three;
+      else if(num_founded_sensors > 3)current_state = founded_more_three;
 
-      Serial.println(temp_sensors_data.num_founded_sensors);
+      Serial.print("Founded sensors ");
+      Serial.println(num_founded_sensors);
 
       break;
 
     case founded_no_more_three:
 
       u8g2.clearBuffer();				
-      sprintf(buffer,"Founded %d sensors", temp_sensors_data.num_founded_sensors);
+      sprintf(buffer,"Founded %d sensors", num_founded_sensors);
+      u8g2.setFont(u8g2_font_ncenB08_tr);
       u8g2.drawStr(20,20, buffer);
-      u8g2.drawStr(2,60, " OK-> cont    D-> exit");
-      u8g2.sendBuffer();
-      if(buttonEnter.isClick())current_state = save;
+      u8g2.setFont(u8g2_font_6x10_tr);
+      u8g2.drawStr(7,40, "UP-> scan");
+      u8g2.drawStr(7,50, "OK-> continue");
+      u8g2.drawStr(7,60, "DOWN-> exit");
+      u8g2.sendBuffer();      
       if(buttonDown.isClick())current_state = exit;
+      if(buttonEnter.isClick())current_state = save;
+      if(buttonUp.isClick())current_state = scanner;
       break;
     
     case not_founded:
 
-      u8g2.clearBuffer();				
+      u8g2.clearBuffer();		
+      u8g2.setFont(u8g2_font_ncenB08_tr);		
       u8g2.drawStr(15,20, "No sensors founded");
-      u8g2.drawStr(2,60, " UP-> scan    D-> exit");
+      u8g2.setFont(u8g2_font_6x10_tr);
+      u8g2.drawStr(7,50, "UP-> scan");
+      u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();
       if(buttonUp.isClick())current_state = scanner;
       if(buttonDown.isClick())current_state = exit;
@@ -839,9 +771,12 @@ void fnOneWireScanner(void){
 
     case founded_more_three:
     
-      u8g2.clearBuffer();				
+      u8g2.clearBuffer();		
+      u8g2.setFont(u8g2_font_ncenB08_tr);		
       u8g2.drawStr(30,40, "founded > 3");
-      u8g2.drawStr(2,60, " UP-> scan    D-> exit");
+      u8g2.setFont(u8g2_font_6x10_tr);
+      u8g2.drawStr(7,50, "UP-> scan");
+      u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();
       if(buttonUp.isClick())current_state = scanner;
       if(buttonDown.isClick())current_state = exit;
@@ -852,27 +787,53 @@ void fnOneWireScanner(void){
       u8g2.clearBuffer();	
 
       u8g2.drawStr(2, 10, "ID1: ");
-      u8g2.drawStr(2, 25, "ID2: ");
-      u8g2.drawStr(2, 40, "ID3: ");
+      u8g2.drawStr(2, 20, "ID2: ");
+      u8g2.drawStr(2, 30, "ID3: ");
 
-      sprintf(buffer,"%x%x%x%x%x%x%x%x", thermometerID_1[0],thermometerID_1[1],thermometerID_1[2],thermometerID_1[3],thermometerID_1[4],thermometerID_1[5],thermometerID_1[6],thermometerID_1[7]);
+      sprintf(buffer,"%x%x%x%x%x%x%x%x", tmp_thermometerID_1[0],tmp_thermometerID_1[1],tmp_thermometerID_1[2],tmp_thermometerID_1[3],tmp_thermometerID_1[4],tmp_thermometerID_1[5],tmp_thermometerID_1[6],tmp_thermometerID_1[7]);
       Serial.println(buffer);
       u8g2.drawStr(30,10, buffer); //  
 
-      sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_2[0],thermometerID_2[1],thermometerID_2[2],thermometerID_2[3],thermometerID_2[4],thermometerID_2[5],thermometerID_2[6],thermometerID_2[7]);
+      sprintf(buffer,"%x%x%x%x%x%x%x%x",tmp_thermometerID_2[0],tmp_thermometerID_2[1],tmp_thermometerID_2[2],tmp_thermometerID_2[3],tmp_thermometerID_2[4],tmp_thermometerID_2[5],tmp_thermometerID_2[6],tmp_thermometerID_2[7]);
       Serial.println(buffer);
-      u8g2.drawStr(30,25, buffer);
+      u8g2.drawStr(30,20, buffer);
 
-      sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_3[0],thermometerID_3[1],thermometerID_3[2],thermometerID_3[3],thermometerID_3[4],thermometerID_3[5],thermometerID_3[6],thermometerID_3[7]);
+      sprintf(buffer,"%x%x%x%x%x%x%x%x",tmp_thermometerID_3[0],tmp_thermometerID_3[1],tmp_thermometerID_3[2],tmp_thermometerID_3[3],tmp_thermometerID_3[4],tmp_thermometerID_3[5],tmp_thermometerID_3[6],tmp_thermometerID_3[7]);
       Serial.println(buffer);
-      u8g2.drawStr(30,40, buffer); 			
+      u8g2.drawStr(30,30, buffer); 			
       
-      u8g2.drawStr(2,60, " OK-> save    D-> exit");
+      u8g2.drawStr(7,40, "UP-> scan");
+      u8g2.drawStr(7,50, "OK-> save");
+      u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();
 
       if(buttonEnter.isClick()){
+
+        for(uint8_t i=0;i<8;i++){
+
+          thermometerID_1[i] = tmp_thermometerID_1[i];
+          thermometerID_2[i] = tmp_thermometerID_2[i];
+          thermometerID_3[i] = tmp_thermometerID_3[i];
+
+          temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][i] = tmp_thermometerID_1[i];
+          temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][i] = tmp_thermometerID_2[i];
+          temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][i] = tmp_thermometerID_3[i];
+
+        }
+
+        temp_sensors_data.num_saved_sensors = num_founded_sensors;
+
+        //update EEPROM
+        EEPROM.updateBlock(EEPROM_1WIRE_ADDRESS, temp_sensors_data);
+
+        //копирование адресов датчиков из структуры уставок которая сохранена в EEPROM
+        memcpy(&thermometerID_1, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.inside_sensor_id-1][0], sizeof(thermometerID_1));  //
+        memcpy(&thermometerID_2, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.outside_sensor_id-1][0], sizeof(thermometerID_2)); //
+        memcpy(&thermometerID_3, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.fridge_sensor_id-1][0], sizeof(thermometerID_3));   //
+
         
-        u8g2.clearBuffer();				
+        u8g2.clearBuffer();	
+        u8g2.setFont(u8g2_font_ncenB08_tr);			
         u8g2.drawStr(40,20, "SAVED!");
         u8g2.sendBuffer();
         delay(2000);    
@@ -880,10 +841,12 @@ void fnOneWireScanner(void){
       }
 
       if(buttonDown.isClick())current_state = exit;
+      if(buttonUp.isClick())current_state = scanner;
       break;
 
     case exit:
       flag_scanned = true;
+      digitalWrite(SENSORS_SUPPLY_5v, LOW);
       break;
 
     default:
@@ -891,7 +854,292 @@ void fnOneWireScanner(void){
     }
   }
 
-
 }
 
 //----------------------------------------------------------------
+
+//EEPROM Init
+bool fnEEpromSetpointsCheck(void){
+
+  EEPROM.readBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data); // считываем уставки из eeprom
+  if (SetpointsUnion.setpoints_data.key == EEPROM_KEY) // если ключ совпадает значит не первый запуск
+  {      
+    Serial.println(EEPROM_KEY);            
+    return true; // возвращаем один
+  }
+  else // если ключ  не совпадает значит первый запуск
+  {
+    Serial.println(EEPROM_KEY); 
+    return false;
+  }
+
+}
+//*******************************************************************************
+
+//------ 
+bool fnEEpromWriteDefaultSetpoints(void){
+
+  EEPROM.writeBlock(EEPROM_SETPOINTS_ADDRESS, default_setpoints_data); // записываем
+  delay(100);
+  EEPROM.readBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data);  // считываем 
+
+  if (SetpointsUnion.setpoints_data.key == EEPROM_KEY){ // проверяем ключ 
+    return true;
+  }
+  else // если не совпадает значит проблемы с EEPROM
+  {
+    return false; // возвращаем ноль
+  }
+
+}
+//***********************************************************************************************
+
+//----------
+bool fnEEpromInit(void){
+
+  Serial.println("fnEEpromInit");
+
+  char buffer [32] = {0,};
+  enum fsm_state {check_saved_setpoints, no_saved_setpoints, write_default_setpoints,\
+  copy_setpoints_from_eepprom, check_saved_sensors, copy_sensors_address_from_eepprom, successfully, fault, exit};
+
+  enum fsm_state step = check_saved_setpoints;
+  bool flag_check_ok = false;
+  bool flag_checked = false;
+
+  while(!flag_checked){
+
+    switch (step){
+
+      case check_saved_setpoints:
+        Serial.println("Check saved setpoints");
+        if(fnEEpromSetpointsCheck())step = copy_setpoints_from_eepprom;
+        else step = no_saved_setpoints;
+        break;
+
+      case no_saved_setpoints:
+        Serial.println("no saved setpoints");
+        step = write_default_setpoints;
+        break;
+
+      case write_default_setpoints:
+        Serial.println("write default ");
+        if(fnEEpromWriteDefaultSetpoints())step = copy_setpoints_from_eepprom;
+        else step = fault;
+        break;
+      
+      case copy_setpoints_from_eepprom:
+        Serial.println("copy setpoints from eepprom");
+        EEPROM.readBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data);
+        step = check_saved_sensors;
+        break;
+
+      case check_saved_sensors:
+        Serial.println("check saved sensors");
+        step = copy_sensors_address_from_eepprom;
+        break;
+
+      case copy_sensors_address_from_eepprom:
+        Serial.println("copy sensors address from eepprom");
+        EEPROM.readBlock(EEPROM_1WIRE_ADDRESS, temp_sensors_data);
+
+        // копирование адресов датчиков из структуры уставок которая сохранена в EEPROM
+        memcpy(&thermometerID_1, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.inside_sensor_id-1][0], sizeof(thermometerID_1));  //
+        memcpy(&thermometerID_2, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.outside_sensor_id-1][0], sizeof(thermometerID_2)); //
+        memcpy(&thermometerID_3, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.fridge_sensor_id-1][0], sizeof(thermometerID_3));   //
+        
+        sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_1[0],thermometerID_1[1],thermometerID_1[2],thermometerID_1[3],thermometerID_1[4],thermometerID_1[5],thermometerID_1[6],thermometerID_1[7]);
+        Serial.println(buffer);
+        sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_2[0],thermometerID_2[1],thermometerID_2[2],thermometerID_2[3],thermometerID_2[4],thermometerID_2[5],thermometerID_2[6],thermometerID_2[7]);
+        Serial.println(buffer);
+        sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_3[0],thermometerID_3[1],thermometerID_3[2],thermometerID_3[3],thermometerID_3[4],thermometerID_3[5],thermometerID_3[6],thermometerID_3[7]);
+        Serial.println(buffer);
+
+        step = successfully;
+        break;
+
+      case successfully:
+        Serial.println("successfully");
+        Serial.println("");
+        flag_check_ok = true;
+        step = exit;
+        break;
+
+      case fault:
+        Serial.println("fault");
+        Serial.println("");
+        flag_check_ok = false;
+        step = exit;
+        break;
+
+      case exit:
+        flag_checked = true;
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  return flag_check_ok;  
+}
+//***********************************************************************************
+
+//--------
+void fnPumpControl(MyData &data, SetpointsStruct &setpoints){
+
+  Serial.println("fnPumpControl");
+
+  enum fsm_state {off,check_door_prx,on_set_timer,check_timer_door_prx};
+  static enum fsm_state step = off;
+
+  switch (setpoints.pump_out_mode){
+
+    case OFF_MODE:
+      data.pump_output_state = false;
+      break;
+
+    case ON_MODE:
+      data.pump_output_state = true;
+      break;
+
+    case AUTO_MODE:
+
+      switch (step)
+      {
+      case off:
+        Serial.println("off");
+        data.pump_output_state = false;
+        timerPumpOff.reset();
+        timerPumpOff.stop();
+        step = check_door_prx;
+        break;
+
+      case check_door_prx:
+        Serial.println("check_door_prx");
+        if(data.door_switch_state && data.proximity_sensor_state)step = on_set_timer;
+        else step = off;
+        break;
+
+      case on_set_timer:
+        Serial.println("on_set_timer");
+        timerPumpOff.setTimeout(setpoints.pump_off_delay * 1000);
+        data.pump_output_state = true;
+        step = check_timer_door_prx;
+        break;
+      
+      case check_timer_door_prx:
+        Serial.println("check_timer_door_prx");
+        if(!data.door_switch_state || timerPumpOff.isReady())step = off;
+        else step = check_timer_door_prx;
+        break;
+
+      default:
+        break;
+      }
+
+      break;
+
+    default:
+      break;
+  }
+}
+//************************************************************************************
+
+//---------------
+void fnInputsUpdate(void){
+
+  if (!digitalRead(DOOR_SWITCH_INPUT_1))inputs_undebounced_sample |= (1 << 0);
+  else  inputs_undebounced_sample &= ~(1 << 0);
+
+  if (!digitalRead(PROXIMITY_SENSOR_INPUT_2))inputs_undebounced_sample |= (1 << 1);
+  else inputs_undebounced_sample &= ~(1 << 1);
+
+  if (digitalRead(IGNITION_SWITCH_INPUT_3))inputs_undebounced_sample |= (1 << 2);
+  else inputs_undebounced_sample &= ~(1 << 2);
+
+  if (!digitalRead(LOW_WASHER_WATER_LEVEL_INPUT_4))inputs_undebounced_sample |= (1 << 3);
+  else inputs_undebounced_sample &= ~(1 << 3);
+
+  inputs_debounced_state = fnDebounce(inputs_undebounced_sample);
+
+  main_data.door_switch_state = (inputs_debounced_state & (1 << 0));
+  main_data.proximity_sensor_state = (inputs_debounced_state & (1 << 1));
+  main_data.ignition_switch_state = (inputs_debounced_state & (1 << 2));
+  main_data.low_washer_water_level = (inputs_debounced_state & (1 << 3));
+
+}
+//**********************************************************************************8
+
+// Debounce
+uint8_t fnDebounce(uint8_t sample) // антидребезг на основе вертикального счетчика
+{
+      static uint8_t state, cnt0, cnt1;
+      uint8_t delta, toggle;
+
+      delta = sample ^ state;
+      cnt1 = cnt1 ^ cnt0;
+      cnt0 = ~cnt0;
+
+      cnt0 &= delta;
+      cnt1 &= delta;
+
+      toggle = cnt0 & cnt1;
+      state ^= toggle;
+      return state;
+}
+//*************************************************************************
+
+//Outputs Update
+void fnOutputsUpdate(MyData &data)
+{     
+  digitalWrite(WATER_PUMP_OUTPUT_1, data.pump_output_state); //
+  digitalWrite(FRIDGE_OUTPUT_2, data.fridge_output_state);     //
+  digitalWrite(CONVERTER_OUTPUT_3, data.converter_output_state);
+  digitalWrite(SENSORS_SUPPLY_5v, data.sensors_supply_output_state);
+  digitalWrite(MAIN_SUPPLY_OUT, data.main_supply_output_state);  
+}
+//*******************************************************************************
+
+//-----------
+void fnTempSensorsUpdate(void){
+
+  static uint8_t temp_cnt;
+  static bool flag_ds18b20_update = false;
+
+  if(timerPeriodSensUpdate.isReady()){
+  
+    if (!flag_ds18b20_update){
+      flag_ds18b20_update = true;
+      temp_sensors.requestTemperatures(); //команда начала преобразования
+    }
+    else
+    {
+      switch (temp_cnt){
+
+        case 0:
+          main_data.inside_temperature = temp_sensors.getTempC(thermometerID_1);
+          Serial.println(main_data.inside_temperature);
+          temp_cnt++;
+          break;
+
+        case 1:
+          main_data.outside_temperature = temp_sensors.getTempC(thermometerID_2);
+          Serial.println(main_data.outside_temperature);
+          temp_cnt++;
+          break;
+
+        case 2:
+          main_data.fridge_temperature = temp_sensors.getTempC(thermometerID_3);
+          Serial.println(main_data.fridge_temperature);
+          temp_cnt = 0;
+          flag_ds18b20_update = false;
+          break;
+
+        default:
+          temp_cnt = 0;
+        break;
+      }
+    }
+  }
+}
