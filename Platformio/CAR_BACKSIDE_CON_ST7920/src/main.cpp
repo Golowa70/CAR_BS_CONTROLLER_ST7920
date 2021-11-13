@@ -8,6 +8,9 @@
 #include <GyverTimers.h>
 #include <EEPROMex.h>
 #include <EEPROMVar.h>
+#include "PJONSoftwareBitBang.h"
+
+PJONSoftwareBitBang bus;
 
 
 #include "defines.h"
@@ -40,6 +43,7 @@ GTimer timerBlink(MS);
 GTimer timerPumpOffDelay(MS);
 GTimer timerPrxSensorFeedbackDelay(MS);
 GTimer timerPeriodSensUpdate(MS);
+GTimer timerPjonSender(MS);
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -64,6 +68,9 @@ uint8_t fnDebounce(uint8_t sample);
 void fnInputsUpdate(void);
 void fnOutputsUpdate(MyData &data);  // функция обновления выходов
 void fnTempSensorsUpdate(void);
+void pj_receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info &packet_info);
+void fnPjonSender(void);
+void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, SetpointsStruct &setpoints, Alarms &alarms);
 
 
 //обработчик прерывания от Timer3 
@@ -109,16 +116,19 @@ void setup() {
   timerPumpOffDelay.setMode(MANUAL);
   timerPrxSensorFeedbackDelay.setMode(MANUAL);
   timerPrxSensorFeedbackDelay.setInterval(PRX_SENSOR_FEEDBACK_DELAY);
+  timerBlink.setInterval(500); 
+  timerPeriodSensUpdate.setInterval(500);
+  timerPjonSender.setInterval(1000);
+
+  Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
+  Timer3.enableISR(CHANNEL_A);
 
   ps_voltage_filter.setCoef(0.1); // установка коэффициента фильтрации (0.0... 1.0). Чем меньше, тем плавнее фильтр
   ps_voltage_filter.setStep(20);  // установка шага фильтрации (мс). Чем меньше, тем резче фильтр
   sens_voltage_filter.setCoef(0.1);
   sens_voltage_filter.setStep(50);
   resistive_sensor_filter.setCoef(0.02);
-  resistive_sensor_filter.setStep(2000);
-
-  Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
-  Timer3.enableISR(CHANNEL_A);
+  resistive_sensor_filter.setStep(1000);
 
   if(!digitalRead(BUTTON_DOWN) && !digitalRead(BUTTON_UP)){
     fnOneWireScanner();
@@ -126,8 +136,10 @@ void setup() {
   
   menu_mode = MENU_MAIN_VIEW;
 
-  timerBlink.setInterval(500); 
-  timerPeriodSensUpdate.setInterval(500);
+  bus.strategy.set_pin(PJON_BUS_PIN); // выбор пина дя передачи данных
+  bus.set_id(PJON_MY_ID); //  установка собственного ID
+  bus.begin();                        //
+  bus.set_receiver(pj_receiver_function);
 
   digitalWrite(SENSORS_SUPPLY_5v, HIGH);
   
@@ -141,7 +153,8 @@ void loop() {
   
   main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
   main_data.sensors_supply_voltage = (analogRead(SENSORS_VOLTAGE_INPUT) * DIVISION_RATIO_SENS_SUPPLY_INPUT);
-  main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR)) * DIVISION_RATIO_RESIST_SENSOR);
+  main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR) -127 + SetpointsUnion.setpoints_data.resistive_sensor_correction) * DIVISION_RATIO_RESIST_SENSOR);
+
 
   //меню----------------------------------------------------------------------
     //определение текущей страницы меню
@@ -245,6 +258,10 @@ void loop() {
   fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
   //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
   fnTempSensorsUpdate();
+  fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
+  fnPjonSender();
+
+
   fnOutputsUpdate(main_data);
 
 }
@@ -443,7 +460,10 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 25:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    float_m = SetpointsUnion.SetpointsArray[num_item];
+    float_n = float_m%10;
+    float_m = float_m/10;
+    sprintf(buffer,"%d.%d",float_m, float_n);
     break;
 
   case 26:
@@ -597,10 +617,10 @@ void fnPrintMainView(void){
 
   sprintf(buffer,"%d L",main_data.water_level_liter);
   u8g2.setFont(u8g2_font_ncenB18_tr);	//
-  u8g2.drawStr(50, 55, buffer);
+  u8g2.drawStr(55, 55, buffer);
 
 
-  u8g2.drawXBM(0, 12, 50, 50, water_level_50x50);
+  u8g2.drawXBM(5, 12, 50, 50, water_level_50x50);
 
   u8g2.sendBuffer();
 }
@@ -1298,3 +1318,106 @@ void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
   }
 }
 //************************************************************************************
+
+// fnPjonReceiver
+void pj_receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info &packet_info){
+
+  receive_from_ID = packet_info.tx.id; // от кого пришли данные
+  
+  if (receive_from_ID == PJON_WATER_FLOAT_SENSOR_ID) {
+    memcpy(&pjon_sensor_receive_data, payload, sizeof(pjon_sensor_receive_data)); //... копируем данные в соответствующую структуру
+    flag_pjon_water_sensor_connected = true;
+  }
+}
+//************************************************************************************************
+
+// fnPjonSender
+void fnPjonSender(void){   
+  
+  if (!bus.update()){
+    if(timerPjonSender.isReady()){
+      pjon_TX_water_sensor_response = bus.send_packet(PJON_WATER_FLOAT_SENSOR_ID, "R", 1); //отправляем запрос к датчику уровня воды
+    }
+  }  
+}
+//*******************************************************************************************
+
+// fnWaterLevelControl
+
+void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, SetpointsStruct &setpoints, Alarms &alarms)
+{
+  float water_tank_capacity_temp_value = (float)setpoints.water_tank_capacity; // для вычисления дробных значений
+
+  switch (setpoints.water_sensor_type_selected)
+  {
+
+  case WATER_FLOAT_SENSOR_PJ:
+
+    alarms.pj_water_sensor = !flag_pjon_water_sensor_connected;
+    alarms.resist_sensor = false;
+
+    switch (pj_sensor_receive_data.value)
+    {
+
+    case WATER_LEVEL_LESS_THEN_25: // если меньше четверти ...
+      data.water_level_percent = 1;
+      break;
+
+    case WATER_LEVEL_25:
+      data.water_level_percent = 25;
+      // tone(BUZZER,1000, 100);
+      break;
+
+    case WATER_LEVEL_50:
+      data.water_level_percent = 50;
+
+      //tone(BUZZER,1000, 100);
+      break;
+
+    case WATER_LEVEL_75:
+      data.water_level_percent = 75;
+
+      //tone(BUZZER,1000, 100);
+      break;
+
+    case WATER_LEVEL_100: //если максимум...
+      data.water_level_percent = 100;
+
+      //tone(BUZZER,1000, 100);
+      break;
+
+    case WATER_LEVEL_SENSOR_DEFECTIVE: // если сенсор неисправен...
+      data.water_level_percent = 0;
+      break;
+
+    default:
+      data.water_level_percent = 0;
+      break;
+    }
+
+    data.water_level_liter = (uint8_t)(setpoints.water_tank_capacity * data.water_level_percent * 0.01);
+    break;
+
+  case WATER_RESISTIVE_SENSOR: // резистивный датчик
+
+        alarms.pj_water_sensor = false;
+
+        data.water_level_liter = data.res_sensor_resistance * (water_tank_capacity_temp_value / setpoints.resistive_sensor_nominal);
+        if (data.res_sensor_resistance > (setpoints.resistive_sensor_nominal + 10))
+        {
+          data.water_level_liter = 0;  //
+          alarms.resist_sensor = true; //
+        }
+        else
+        {
+          alarms.resist_sensor = false;
+        }
+
+        data.water_level_percent = (uint8_t)data.water_level_liter / (setpoints.water_tank_capacity * 0.01); // литры в проценты
+        break;
+
+  default:
+        break;
+  }
+}
+//*******************************************************************************************

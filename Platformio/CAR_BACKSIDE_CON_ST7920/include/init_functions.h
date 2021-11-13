@@ -68,7 +68,7 @@ void fnIOInit(void) {
     default_setpoints_data.fridge_Temp_off = 7;  // Температура выключения Temp_off.
 
     default_setpoints_data.fridge_out_mode = AUTO_MODE;  // Режим(авто, авто с термостатом, вкл, выкл).
-    default_setpoints_data.resistive_sensor_correction = 0; // 0- нолевая коррекция
+    default_setpoints_data.resistive_sensor_correction = 127; // 127 нолевая коррекция
     default_setpoints_data.resistive_sensor_nominal = 190;    // 
     default_setpoints_data.water_sensor_type_selected = PJON_SENSOR_TYPE;
     default_setpoints_data.water_tank_capacity = WATER_TANK_CAPACITY;

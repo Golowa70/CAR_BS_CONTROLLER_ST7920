@@ -16,13 +16,6 @@ struct PjonReceive
   uint8_t value;
 } pjon_sensor_receive_data;
 
-//pjon transmitt
-/*
-  struct PjonSend {                     // структура для отправки данных по протоколу PJON
-    
-    } data_send_to_main_controller;
-  */
-
 //*****************************************************************************************************
 
 
@@ -32,32 +25,30 @@ struct SetpointsStruct { // структура для уставок
 
   uint8_t pump_off_delay;
   uint8_t pump_out_mode;  // Режим(авто, вкл, выкл).
-
   uint8_t converter_U_off;    // дробное со смещённой вправо точкой 12.7в = 127,  13.2в =132 и т.д.
   uint8_t converter_T_U_off;  // задержка отключения по низкому напряжению U_off
   uint8_t converter_U_on;     // напряжение включения (порог)
+
   uint8_t converter_T_U_on;   // задержка включения по U_on
   uint8_t converter_T_IGN_off; // задержка отключения после выключения зажигания
-  uint8_t convertet_out_mode;  // Режим(авто, вкл, выкл).
-  
+  uint8_t convertet_out_mode;  // Режим(авто, вкл, выкл).  
   uint8_t fridge_U_off;     // дробное со смещённой вправо точкой 12.7в = 127,  13.2в =132 и т.д.
   uint8_t fridge_T_U_off;   // задержка отключения по низкому напряжению U_off
+
   uint8_t fridge_U_on;      // напряжение включения (порог)
   uint8_t fridge_T_U_on;    // задержка включения по U_on
   uint8_t fridge_T_IGN_off; // задержка отключения после выключения зажигания
   uint8_t fridge_Temp_on;   // Температура включения Temp_on.
   uint8_t fridge_Temp_off;  // Температура выключения Temp_off.
-  uint8_t fridge_out_mode;  // Режим(авто, авто с термостатом, вкл, выкл).
 
+  uint8_t fridge_out_mode;  // Режим(авто, авто с термостатом, вкл, выкл).
   uint8_t resistive_sensor_correction; // 0- нолевая коррекция
   uint8_t resistive_sensor_nominal;    // 
-
   uint8_t water_sensor_type_selected;
   uint8_t water_tank_capacity;
 
   uint8_t mb_slave_ID;
   uint8_t mb_baud_rate;
-
   uint8_t buzzer_out_mode;
   uint8_t scrreen_off_delay;  //
   uint8_t shutdown_delay;
@@ -65,9 +56,9 @@ struct SetpointsStruct { // структура для уставок
   uint8_t voltage_correction; // 127 - нолевая коррекция
   uint8_t lcd_brightness;
   uint8_t logo_selection;
-
   uint8_t inside_sensor_id;
   uint8_t outside_sensor_id;
+
   uint8_t fridge_sensor_id;
   uint8_t spare_1;
   uint8_t spare_2;
@@ -236,7 +227,7 @@ struct MyData
    20,2,130,255,255,
    255,255,3,255,255,
    255,255,255,255,255,
-   3,255,255,255,255,
+   3,255,255,1,255,
    255,255,255,255,255,
    255,255,255,255,255,
    255,255,255,255,255,
