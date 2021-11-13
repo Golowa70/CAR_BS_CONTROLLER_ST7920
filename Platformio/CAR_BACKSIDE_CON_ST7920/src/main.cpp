@@ -150,8 +150,9 @@ void setup() {
 
   digitalWrite(SENSORS_SUPPLY_5v, HIGH);
   
-
 }
+//**********************************************************************************************
+
 
 void loop() {
   
@@ -271,22 +272,16 @@ void loop() {
   fnTempSensorsUpdate();
   fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
 
-  if(timerPjonSender.isReady()){
-    fnPjonSender();
-  }
-
-  if(timerPjonResponse.isReady()){
-    flag_pjon_water_sensor_connected = false;
-  }
-
-  bus.receive(1000);   // прием данных PJON и возврат результата приёма
+  if(timerPjonSender.isReady())fnPjonSender();
+  if(timerPjonResponse.isReady())flag_pjon_water_sensor_connected = false;
+  bus.receive(1000);  
   bus.update();
 
   fnOutputsUpdate(main_data);
 
 }
 
-//********************************************************************************
+//************************************************************************************************************
 // 
 void fnPrintSelectionFrame(uint8_t item_pointer) {
 
@@ -452,7 +447,21 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 18:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    
+    switch (SetpointsUnion.SetpointsArray[num_item])
+    {
+      case PJON_SENSOR_TYPE:
+        sprintf(buffer, "PJn");
+        break;
+
+      case RES_SENSOR_TYPE:
+        sprintf(buffer, "Res");
+        break;
+      
+      default:
+      break;
+    }
+
     break;
   
   case 19:
