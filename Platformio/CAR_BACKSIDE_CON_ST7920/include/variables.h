@@ -170,41 +170,41 @@ struct MyData
   
 
   /* массивы строк с именами пунктов меню настроек */
-  const char i0[] PROGMEM = " Pump off delay:";  
-  const char i1[] PROGMEM = " Pump out mode:";
-  const char i2[] PROGMEM = " Conv U off:";
-  const char i3[] PROGMEM = " Conv T U off:";
-  const char i4[] PROGMEM = " Conv U on:";
-  const char i5[] PROGMEM = " Conv T U on:";
-  const char i6[] PROGMEM = " Conv T IGN off:";
-  const char i7[] PROGMEM = " Conv out mode:";
-  const char i8[] PROGMEM = " Fridge U off:";
-  const char i9[] PROGMEM = " Fridge T U off:";
-  const char i10[] PROGMEM = " Fridge U on:";
-  const char i11[] PROGMEM = " Fridge T U on:";
-  const char i12[] PROGMEM = " Fridge T IGN off:";
-  const char i13[] PROGMEM = " Fridge temp on:";
-  const char i14[] PROGMEM = " Fridge temp off:";
-  const char i15[] PROGMEM = " Fridge out mode:";
-  const char i16[] PROGMEM = " Res sens corr:";
-  const char i17[] PROGMEM = " Res sens nom:";
-  const char i18[] PROGMEM = " Water sens type:";
-  const char i19[] PROGMEM = " Water tank cap:";
-  const char i20[] PROGMEM = " MB slave ID:";
-  const char i21[] PROGMEM = " MB baud rate:";
-  const char i22[] PROGMEM = " Buzzer out mode:";
-  const char i23[] PROGMEM = " Screen off delay:";
-  const char i24[] PROGMEM = " Shutdown delay:";
-  const char i25[] PROGMEM = " U correction:";
-  const char i26[] PROGMEM = " Brightness:";
-  const char i27[] PROGMEM = " Logo:";
-  const char i28[] PROGMEM = " Inside sid:";
-  const char i29[] PROGMEM = " Outside sid:";
-  const char i30[] PROGMEM = " Fridge sid:";
-  const char i31[] PROGMEM = " Parametr 32:";
-  const char i32[] PROGMEM = " Parametr 33:";
-  const char i33[] PROGMEM = " Parametr 34:";
-  const char i34[] PROGMEM = " Parametr 35:";
+  const char i0[] PROGMEM = "Pump off delay:";  
+  const char i1[] PROGMEM = "Pump out mode:";
+  const char i2[] PROGMEM = "Conv U off:";
+  const char i3[] PROGMEM = "Conv T U off:";
+  const char i4[] PROGMEM = "Conv U on:";
+  const char i5[] PROGMEM = "Conv T U on:";
+  const char i6[] PROGMEM = "Conv T IGN off:";
+  const char i7[] PROGMEM = "Conv out mode:";
+  const char i8[] PROGMEM = "Fridge U off:";
+  const char i9[] PROGMEM = "Fridge T U off:";
+  const char i10[] PROGMEM = "Fridge U on:";
+  const char i11[] PROGMEM = "Fridge T U on:";
+  const char i12[] PROGMEM = "Fridge T IGN off:";
+  const char i13[] PROGMEM = "Fridge temp on:";
+  const char i14[] PROGMEM = "Fridge temp off:";
+  const char i15[] PROGMEM = "Fridge out mode:";
+  const char i16[] PROGMEM = "Res sens corr:";
+  const char i17[] PROGMEM = "Res sens nom:";
+  const char i18[] PROGMEM = "Water sens type:";
+  const char i19[] PROGMEM = "Water tank cap:";
+  const char i20[] PROGMEM = "MB slave ID:";
+  const char i21[] PROGMEM = "MB baud rate:";
+  const char i22[] PROGMEM = "Buzzer out mode:";
+  const char i23[] PROGMEM = "Screen off delay:";
+  const char i24[] PROGMEM = "Shutdown delay:";
+  const char i25[] PROGMEM = "U correction:";
+  const char i26[] PROGMEM = "Brightness:";
+  const char i27[] PROGMEM = "Logo:";
+  const char i28[] PROGMEM = "Inside sid:";
+  const char i29[] PROGMEM = "Outside sid:";
+  const char i30[] PROGMEM = "Fridge sid:";
+  const char i31[] PROGMEM = "Parametr 32:";
+  const char i32[] PROGMEM = "Parametr 33:";
+  const char i33[] PROGMEM = "Parametr 34:";
+  const char i34[] PROGMEM = "Parametr 35:";
   
   /*Массив ссылок на имена пунктов меню, обращение к названию пунктов по их номеру*/
   const char* const setpoints_menu_names[] PROGMEM =           
@@ -221,7 +221,7 @@ struct MyData
   //Массив минимальных значений параметров
   uint8_t param_range_min[MENU_SETPOINTS_NUM_ITEMS]  =
   {
-    3,0,5,1,5,
+    3,0,50,1,5,
     1,0,0,5,1,
     5,0,0,0,0,
     0,0,0,0,0,
@@ -233,7 +233,7 @@ struct MyData
   //Массив максимальных значений параметров
   uint8_t param_range_max[MENU_SETPOINTS_NUM_ITEMS]  =
   {
-   20,3,13,255,255,
+   20,2,130,255,255,
    255,255,3,255,255,
    255,255,255,255,255,
    3,255,255,255,255,
@@ -263,7 +263,6 @@ uint8_t display_num_lines;
 
 //********* OTHER VARIABLES *********************************************************
 bool flag_door_switch_old_state; // предыдущее состояние двери
-bool proximity_sensor_old_state; // предыдущее состояние датчика приближения
 
 bool flag_convOff_due_voltage;    // флаг что конветер был выключен по напряжению
 bool flag_convOff_due_ign_switch; // флаг что конветер был выключен по таймеру после выключения зажигания

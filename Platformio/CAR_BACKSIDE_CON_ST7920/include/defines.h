@@ -21,8 +21,8 @@
 
 //modes
 #define OFF_MODE               0
-#define ON_MODE                1
-#define AUTO_MODE              2
+#define AUTO_MODE              1
+#define ON_MODE                2
 
 //water sensors types
 #define WATER_FLOAT_SENSOR_PJ  0

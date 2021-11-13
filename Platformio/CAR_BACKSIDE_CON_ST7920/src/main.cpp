@@ -36,7 +36,8 @@ GButton buttonEnter(BUTTON_ENTER_ESC);
 
 //-------- Timers ----------------------------
 GTimer timerBlink(MS);
-GTimer timerPumpOff(MS);
+GTimer timerPumpOffDelay(MS);
+GTimer timerPrxSensorFeedbackDelay(MS);
 GTimer timerPeriodSensUpdate(MS);
 
 //------ Functions -------------------------------------------------------------------------
@@ -91,6 +92,10 @@ void setup() {
     delay(1000);    
   }
   
+  timerPumpOffDelay.setMode(MANUAL);
+  timerPrxSensorFeedbackDelay.setMode(MANUAL);
+  timerPrxSensorFeedbackDelay.setInterval(PRX_SENSOR_FEEDBACK_DELAY);
+
   Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
   Timer3.enableISR(CHANNEL_A);
 
@@ -112,7 +117,9 @@ void loop() {
   
   fnInputsUpdate();
   digitalWrite(SENSORS_SUPPLY_5v, HIGH);
-
+  
+  main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
+  
   //меню----------------------------------------------------------------------
     //определение текущей страницы меню
     if(menu_current_item < display_num_lines) menu_current_page = 0;  
@@ -265,7 +272,10 @@ void fnPrintMenuItemName(uint8_t _num_item, uint8_t _num_line, const char* const
     }                                 
  */
   //strcpy_P(buffer, pgm_read_word(&(_names[_num_item]))); 
-  u8g2.drawStr(0,(_num_line*12)-2,buffer);          // Вывод готовой строки 
+  u8g2.setFont(u8g2_font_6x12_tr); 
+  u8g2.drawStr(3,(_num_line*12)-2,buffer);          // Вывод готовой строки
+  u8g2.setFont(u8g2_font_ncenB08_tr);	// 
+  
 }
 
 
@@ -285,7 +295,22 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 1:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+
+    switch (SetpointsUnion.SetpointsArray[num_item])
+    {
+    case OFF_MODE:
+      sprintf(buffer, "off");
+      break;    
+    case ON_MODE:
+      sprintf(buffer, "on");
+      break;
+    case AUTO_MODE:
+      sprintf(buffer, "auto");
+      break;      
+    default:
+      break;
+    }
+    
     break;
 
   case 2:
@@ -426,7 +451,7 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
   }
   
-  u8g2.drawStr(107,(num_line*12)-2,buffer);
+  u8g2.drawStr(102,(num_line*12)-2,buffer);
   
 }
 
@@ -465,8 +490,8 @@ void fnPrintMainView(void){
 
   u8g2.setFont(u8g2_font_5x7_tr);
 
-  main_data.battery_voltage = 12.5;
-  float_m = main_data.battery_voltage * 10;
+  
+  float_m = (uint8_t)(main_data.battery_voltage * 10);
   float_n = float_m%10;
   float_m = float_m/10;
   sprintf(buffer,"%d.%dv",float_m, float_n);
@@ -990,59 +1015,61 @@ void fnPumpControl(MyData &data, SetpointsStruct &setpoints){
 
   Serial.println("fnPumpControl");
 
-  enum fsm_state {off,check_door_prx,on_set_timer,check_timer_door_prx};
-  static enum fsm_state step = off;
+  static bool proximity_sensor_old_state; // предыдущее состояние датчика приближения
+  static uint8_t pump_out_mode_old = setpoints.pump_out_mode;
+
+  if(setpoints.pump_out_mode != pump_out_mode_old){
+    pump_out_mode_old = setpoints.pump_out_mode;
+    data.pump_output_state = false;
+    timerPumpOffDelay.stop();
+  }
 
   switch (setpoints.pump_out_mode){
 
     case OFF_MODE:
       data.pump_output_state = false;
+      timerPumpOffDelay.stop();
       break;
 
     case ON_MODE:
       data.pump_output_state = true;
+      timerPumpOffDelay.stop();
       break;
 
     case AUTO_MODE:
 
-      switch (step)
+      if (data.door_switch_state)
       {
-      case off:
-        Serial.println("off");
-        data.pump_output_state = false;
-        timerPumpOff.reset();
-        timerPumpOff.stop();
-        step = check_door_prx;
-        break;
-
-      case check_door_prx:
-        Serial.println("check_door_prx");
-        if(data.door_switch_state && data.proximity_sensor_state)step = on_set_timer;
-        else step = off;
-        break;
-
-      case on_set_timer:
-        Serial.println("on_set_timer");
-        timerPumpOff.setTimeout(setpoints.pump_off_delay * 1000);
-        data.pump_output_state = true;
-        step = check_timer_door_prx;
-        break;
-      
-      case check_timer_door_prx:
-        Serial.println("check_timer_door_prx");
-        if(!data.door_switch_state || timerPumpOff.isReady())step = off;
-        else step = check_timer_door_prx;
-        break;
-
-      default:
-        break;
+        if ((data.proximity_sensor_state == HIGH) && (proximity_sensor_old_state == LOW) && (timerPrxSensorFeedbackDelay.isReady()))
+        {
+          data.pump_output_state = 1 - data.pump_output_state;
+          timerPrxSensorFeedbackDelay.setInterval(PRX_SENSOR_FEEDBACK_DELAY);
+          
+          if (data.pump_output_state)
+            timerPumpOffDelay.setInterval(setpoints.pump_off_delay * SECOND);
+          else
+            timerPumpOffDelay.stop();
+        }
+      }
+      else
+      {
+        data.pump_output_state = LOW;
+        timerPumpOffDelay.stop();
       }
 
+      proximity_sensor_old_state = data.proximity_sensor_state;
+
+      if (timerPumpOffDelay.isReady())
+      {
+        data.pump_output_state = LOW;
+        timerPumpOffDelay.stop();
+      }
       break;
 
     default:
-      break;
-  }
+    break;
+
+  }  
 }
 //************************************************************************************
 
