@@ -41,7 +41,7 @@
 
 
 //communications
-#define PJON_BUS_PIN         3   // new 
+#define PJON_BUS_PIN         3   //  
 #define ONE_WIRE_PIN         4
 #define DE_RS485_PIN         6   // in RS485.h
 
@@ -95,6 +95,7 @@
 //pjon swbb
 #define PJON_MY_ID                    2
 #define PJON_WATER_FLOAT_SENSOR_ID    3
+#define PJON_RESPONSE_TIMEOUT         5000
 
 
 #define VERSION "ver 4.0"

@@ -26,6 +26,9 @@ PJONSoftwareBitBang bus;
 
 U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R2, /* CS=*/LCD_CS , /* reset=*/ LCD_RESET);
 
+uint32_t time;
+uint32_t old_time;
+
 //--------- one wire ---------------------------------------------------------------
 #define TEMPERATURE_PRECISION 9                                  // точность измерения температуры 9 бит
 OneWire oneWire(ONE_WIRE_PIN);                                   // порт шины 1WIRE
@@ -44,6 +47,8 @@ GTimer timerPumpOffDelay(MS);
 GTimer timerPrxSensorFeedbackDelay(MS);
 GTimer timerPeriodSensUpdate(MS);
 GTimer timerPjonSender(MS);
+GTimer timerPjonResponse(MS);
+GTimer timerMenuUpdate(MS);
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -118,7 +123,9 @@ void setup() {
   timerPrxSensorFeedbackDelay.setInterval(PRX_SENSOR_FEEDBACK_DELAY);
   timerBlink.setInterval(500); 
   timerPeriodSensUpdate.setInterval(500);
-  timerPjonSender.setInterval(1000);
+  timerPjonSender.setInterval(500);
+  timerMenuUpdate.setInterval(200);
+  timerPjonResponse.setTimeout(PJON_RESPONSE_TIMEOUT);
 
   Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
   Timer3.enableISR(CHANNEL_A);
@@ -136,9 +143,9 @@ void setup() {
   
   menu_mode = MENU_MAIN_VIEW;
 
+  bus.begin();  
   bus.strategy.set_pin(PJON_BUS_PIN); // выбор пина дя передачи данных
-  bus.set_id(PJON_MY_ID); //  установка собственного ID
-  bus.begin();                        //
+  bus.set_id(PJON_MY_ID); //  установка собственного ID   
   bus.set_receiver(pj_receiver_function);
 
   digitalWrite(SENSORS_SUPPLY_5v, HIGH);
@@ -148,15 +155,16 @@ void setup() {
 
 void loop() {
   
-  fnInputsUpdate();
   digitalWrite(SENSORS_SUPPLY_5v, HIGH);
+  fnInputsUpdate();
   
   main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
   main_data.sensors_supply_voltage = (analogRead(SENSORS_VOLTAGE_INPUT) * DIVISION_RATIO_SENS_SUPPLY_INPUT);
   main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR) -127 + SetpointsUnion.setpoints_data.resistive_sensor_correction) * DIVISION_RATIO_RESIST_SENSOR);
 
-
+  
   //меню----------------------------------------------------------------------
+  if(timerMenuUpdate.isReady()){
     //определение текущей страницы меню
     if(menu_current_item < display_num_lines) menu_current_page = 0;  
     else if(menu_current_item < display_num_lines*2)menu_current_page = 1 ;
@@ -253,14 +261,26 @@ void loop() {
       break;
 
     }
+
+  }
   //конец меню
+
 
   fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
   //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
   fnTempSensorsUpdate();
   fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
-  fnPjonSender();
 
+  if(timerPjonSender.isReady()){
+    fnPjonSender();
+  }
+
+  if(timerPjonResponse.isReady()){
+    flag_pjon_water_sensor_connected = false;
+  }
+
+  bus.receive(1000);   // прием данных PJON и возврат результата приёма
+  bus.update();
 
   fnOutputsUpdate(main_data);
 
@@ -1252,7 +1272,7 @@ void fnTempSensorsUpdate(void){
 //--------------
 void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
 
-  Serial.println("fnPumpControl_2");
+  //Serial.println("fnPumpControl_2");
 
   bool prx_trigged = false;
   static bool prx_old_state = data.proximity_sensor_state;
@@ -1284,7 +1304,6 @@ void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
       switch (step)
       {
       case off:
-        Serial.println("off");
         data.pump_output_state = false;        
         timerPumpOffDelay.stop();
         if(data.door_switch_state)step = wait_for_prx;
@@ -1293,7 +1312,6 @@ void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
         break;
 
       case wait_for_prx:
-        Serial.println("wait_for_prx");
         if(prx_trigged){
           timerPumpOffDelay.setTimeout(setpoints.pump_off_delay * 1000);
           data.pump_output_state = HIGH;
@@ -1303,7 +1321,6 @@ void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
         break;
 
       case wait_for_T_off:
-        Serial.println("wait_for_T_off");
         if(!data.door_switch_state || prx_trigged || timerPumpOffDelay.isReady() )step = off;        
         break;      
       
@@ -1323,22 +1340,23 @@ void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
 void pj_receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info &packet_info){
 
   receive_from_ID = packet_info.tx.id; // от кого пришли данные
+  Serial.print("receive_from_ID");
+  Serial.println(receive_from_ID);
   
   if (receive_from_ID == PJON_WATER_FLOAT_SENSOR_ID) {
     memcpy(&pjon_sensor_receive_data, payload, sizeof(pjon_sensor_receive_data)); //... копируем данные в соответствующую структуру
     flag_pjon_water_sensor_connected = true;
+    timerPjonResponse.setTimeout(PJON_RESPONSE_TIMEOUT);
+    Serial.println(pjon_sensor_receive_data.value);
   }
 }
 //************************************************************************************************
 
 // fnPjonSender
 void fnPjonSender(void){   
-  
-  if (!bus.update()){
-    if(timerPjonSender.isReady()){
-      pjon_TX_water_sensor_response = bus.send_packet(PJON_WATER_FLOAT_SENSOR_ID, "R", 1); //отправляем запрос к датчику уровня воды
-    }
-  }  
+    
+  pjon_TX_water_sensor_response = bus.send_packet(PJON_WATER_FLOAT_SENSOR_ID, "R", 1); //отправляем запрос к датчику уровня воды    
+
 }
 //*******************************************************************************************
 
@@ -1396,6 +1414,11 @@ void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, Setp
     }
 
     data.water_level_liter = (uint8_t)(setpoints.water_tank_capacity * data.water_level_percent * 0.01);
+    if(!flag_pjon_water_sensor_connected){
+      data.water_level_liter = 0;
+      data.water_level_percent = 0;
+    }
+
     break;
 
   case WATER_RESISTIVE_SENSOR: // резистивный датчик
