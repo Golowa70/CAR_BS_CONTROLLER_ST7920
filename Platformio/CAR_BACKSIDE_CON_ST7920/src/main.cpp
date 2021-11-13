@@ -2,6 +2,7 @@
 #include <U8g2lib.h>
 #include "GyverButton.h"
 #include "GyverTimer.h"
+#include <GyverFilters.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <GyverTimers.h>
@@ -40,6 +41,11 @@ GTimer timerPumpOffDelay(MS);
 GTimer timerPrxSensorFeedbackDelay(MS);
 GTimer timerPeriodSensUpdate(MS);
 
+//-------- Filters ---------------------------
+GFilterRA ps_voltage_filter;
+GFilterRA sens_voltage_filter;
+GFilterRA resistive_sensor_filter;
+
 //------ Functions -------------------------------------------------------------------------
 void fnPrintSelectionFrame(uint8_t menu_pointer);
 void fnPrintMenuItemName(uint8_t num, uint8_t num_line, const char* const* names);
@@ -53,10 +59,12 @@ bool fnEEpromSetpointsInit(void);
 bool fnEEpromWriteDefaultSetpoints(void);
 bool fnEEpromInit(void);
 void fnPumpControl(MyData &data, SetpointsStruct &setpoints);
+void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints);
 uint8_t fnDebounce(uint8_t sample);
 void fnInputsUpdate(void);
 void fnOutputsUpdate(MyData &data);  // функция обновления выходов
 void fnTempSensorsUpdate(void);
+
 
 //обработчик прерывания от Timer3 
 ISR(TIMER3_A)
@@ -92,9 +100,22 @@ void setup() {
     delay(1000);    
   }
   
+  temp_sensors.begin();
+  temp_sensors.setResolution(thermometerID_1, TEMPERATURE_PRECISION);
+  temp_sensors.setResolution(thermometerID_2, TEMPERATURE_PRECISION);
+  temp_sensors.setResolution(thermometerID_3, TEMPERATURE_PRECISION);
+  temp_sensors.setWaitForConversion(false);
+
   timerPumpOffDelay.setMode(MANUAL);
   timerPrxSensorFeedbackDelay.setMode(MANUAL);
   timerPrxSensorFeedbackDelay.setInterval(PRX_SENSOR_FEEDBACK_DELAY);
+
+  ps_voltage_filter.setCoef(0.1); // установка коэффициента фильтрации (0.0... 1.0). Чем меньше, тем плавнее фильтр
+  ps_voltage_filter.setStep(20);  // установка шага фильтрации (мс). Чем меньше, тем резче фильтр
+  sens_voltage_filter.setCoef(0.1);
+  sens_voltage_filter.setStep(50);
+  resistive_sensor_filter.setCoef(0.02);
+  resistive_sensor_filter.setStep(2000);
 
   Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
   Timer3.enableISR(CHANNEL_A);
@@ -119,7 +140,9 @@ void loop() {
   digitalWrite(SENSORS_SUPPLY_5v, HIGH);
   
   main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
-  
+  main_data.sensors_supply_voltage = (analogRead(SENSORS_VOLTAGE_INPUT) * DIVISION_RATIO_SENS_SUPPLY_INPUT);
+  main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR)) * DIVISION_RATIO_RESIST_SENSOR);
+
   //меню----------------------------------------------------------------------
     //определение текущей страницы меню
     if(menu_current_item < display_num_lines) menu_current_page = 0;  
@@ -219,7 +242,8 @@ void loop() {
     }
   //конец меню
 
-  fnPumpControl(main_data, SetpointsUnion.setpoints_data);
+  fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
+  //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
   fnTempSensorsUpdate();
   fnOutputsUpdate(main_data);
 
@@ -287,6 +311,7 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
   //u8g2.drawStr(98,(num_line*12)-2,buffer);
 
   char buffer[10] = {0,};
+  uint8_t float_m, float_n; // переменные для разбития числа на целую и дробную часть
 
   switch (num_item)
   {
@@ -314,7 +339,10 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 2:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    float_m = SetpointsUnion.SetpointsArray[num_item];
+    float_n = float_m%10;
+    float_m = float_m/10;
+    sprintf(buffer,"%d.%d",float_m, float_n);
     break;  
 
   case 3:
@@ -322,7 +350,10 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 4:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    float_m = SetpointsUnion.SetpointsArray[num_item];
+    float_n = float_m%10;
+    float_m = float_m/10;
+    sprintf(buffer,"%d.%d",float_m, float_n);
     break;
 
   case 5:
@@ -338,7 +369,10 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 8:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    float_m = SetpointsUnion.SetpointsArray[num_item];
+    float_n = float_m%10;
+    float_m = float_m/10;
+    sprintf(buffer,"%d.%d",float_m, float_n);
     break;
 
   case 9:
@@ -346,7 +380,10 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 10:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    float_m = SetpointsUnion.SetpointsArray[num_item];
+    float_n = float_m%10;
+    float_m = float_m/10;
+    sprintf(buffer,"%d.%d",float_m, float_n);
     break;
 
   case 11:
@@ -490,6 +527,11 @@ void fnPrintMainView(void){
 
   u8g2.setFont(u8g2_font_5x7_tr);
 
+  u8g2.drawBox(98,1,31,8);
+  u8g2.drawBox(98,11,31,8);
+  u8g2.drawBox(98,21,31,8);
+
+  u8g2.setDrawColor(0);
   
   float_m = (uint8_t)(main_data.battery_voltage * 10);
   float_n = float_m%10;
@@ -503,6 +545,8 @@ void fnPrintMainView(void){
   sprintf(buffer,"< %dC", (int)main_data.outside_temperature);
   u8g2.drawStr(98, 28, buffer);
 
+  u8g2.setDrawColor(1);
+
   if(main_data.pump_output_state){
     u8g2.drawBox(64,1,21,8);
     u8g2.setDrawColor(0);
@@ -515,23 +559,42 @@ void fnPrintMainView(void){
     u8g2.setDrawColor(1);
   }
 
-  u8g2.drawBox(64,11,21,8);
-  u8g2.setDrawColor(0);
-  u8g2.drawStr(65, 18, "CONV");
-  u8g2.setDrawColor(1);
+  if(main_data.converter_output_state){
+    u8g2.drawBox(64,11,21,8);
+    u8g2.setDrawColor(0);
+    u8g2.drawStr(65, 18, "CONV");
+    u8g2.setDrawColor(1);
+  }
+  else{
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(64,11,21,8);
+    u8g2.setDrawColor(1);
+  }
 
-  u8g2.drawBox(64,21,21,8);
-  u8g2.setDrawColor(0);
-  u8g2.drawStr(65, 28, "FRDG");
-  u8g2.setDrawColor(1);
+  if(main_data.fridge_output_state){
+    u8g2.drawBox(64,21,21,8);
+    u8g2.setDrawColor(0);
+    u8g2.drawStr(65, 28, "FRDG");
+    u8g2.setDrawColor(1);
+  }
+  else{
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(64,21,21,8);
+    u8g2.setDrawColor(1);
+  }
 
-  u8g2.drawBox(1,1,16,8);
-  u8g2.setDrawColor(0);
-  u8g2.drawStr(2, 8, "ERR");
-  u8g2.setDrawColor(1);
-  
+  if(present_alarms.common){
+    u8g2.drawBox(1,1,16,8);
+    u8g2.setDrawColor(0);
+    u8g2.drawStr(2, 8, "ERR");
+    u8g2.setDrawColor(1);
+  }
+  else{
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(1,1,16,8);
+    u8g2.setDrawColor(1);
+  }
 
-  main_data.water_level_liter = 35;
   sprintf(buffer,"%d L",main_data.water_level_liter);
   u8g2.setFont(u8g2_font_ncenB18_tr);	//
   u8g2.drawStr(50, 55, buffer);
@@ -566,12 +629,12 @@ void fnPrintMenuParamView(void){
 void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 
   char buffer[10] = {0,};
-  uint8_t float_m, float_n; // переменные для разбития числа на целую и дробную часть
+  int float_m, float_n; // переменные для разбития числа на целую и дробную часть
   
   switch (num_item)
   {
   case 0:
-    float_m = main_data.battery_voltage * 10;
+    float_m = (int)(main_data.battery_voltage * 10);
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dv",float_m, float_n);
@@ -582,38 +645,35 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 2:
-    float_m = main_data.outside_temperature * 10;
+    float_m = (int)(main_data.outside_temperature * 10);
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dC",float_m, float_n);
     break;
 
   case 3:
-    float_m = main_data.inside_temperature * 10;
+    float_m = (int)(main_data.inside_temperature * 10);
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dC",float_m, float_n);
     break;
 
   case 4:
-    float_m = main_data.fridge_temperature * 10;
+    float_m = (int)(main_data.fridge_temperature * 10);
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dC",float_m, float_n);
     break;
 
   case 5:
-    float_m = main_data.sensors_supply_voltage * 10;
+    float_m = (int)(main_data.sensors_supply_voltage * 10);
     float_n = float_m%10;
     float_m = float_m/10;
     sprintf(buffer,"%d.%dv",float_m, float_n);
     break;
 
   case 6:
-    float_m = main_data.res_sensor_resistance * 10;
-    float_n = float_m%10;
-    float_m = float_m/10;
-    sprintf(buffer,"%d.%d",float_m, float_n);
+    sprintf(buffer,"%d",main_data.res_sensor_resistance);
     break;
 
   case 7:
@@ -726,7 +786,6 @@ void fnOneWireScanner(void){
             case 1:
               for (uint8_t j = 0; j < 8; j++) // заносим адрес первого датчика в массив
               {
-                //temp_sensors_data.sensors_ID_array[INSIDE_SENSOR - 1][j] = address[j];
                 tmp_thermometerID_1[j] = address[j];
               } 
               break;
@@ -734,7 +793,6 @@ void fnOneWireScanner(void){
             case 2:
               for (uint8_t j = 0; j < 8; j++)
               {
-                //temp_sensors_data.sensors_ID_array[OUTSIDE_SENSOR - 1][j] = address[j];
                 tmp_thermometerID_2[j] = address[j];                         
               } 
               break;
@@ -742,7 +800,6 @@ void fnOneWireScanner(void){
             case 3:
               for (uint8_t j = 0; j < 8; j++)
               {
-                //temp_sensors_data.sensors_ID_array[FRIDGE_SENSOR - 1][j] = address[j];
                 tmp_thermometerID_3[j] = address[j];                                                    
               }
 
@@ -1170,3 +1227,74 @@ void fnTempSensorsUpdate(void){
     }
   }
 }
+//******************************************************************************
+
+//--------------
+void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
+
+  Serial.println("fnPumpControl_2");
+
+  bool prx_trigged = false;
+  static bool prx_old_state = data.proximity_sensor_state;
+  enum fsm_state {off, wait_for_prx,wait_for_T_off};
+  static enum fsm_state step = off;
+
+  if((data.proximity_sensor_state == true) && (prx_old_state == false) && (timerPrxSensorFeedbackDelay.isReady())){
+
+    timerPrxSensorFeedbackDelay.setTimeout(PRX_SENSOR_FEEDBACK_DELAY);
+    prx_trigged = true;
+  }
+
+  prx_old_state = data.proximity_sensor_state;
+
+
+  switch (setpoints.pump_out_mode){
+
+    case OFF_MODE:
+      data.pump_output_state = false;
+      break;
+
+    case ON_MODE:
+      if(!data.door_switch_state)step = off;
+      else data.pump_output_state = true;
+      break;
+
+    case AUTO_MODE:
+
+      switch (step)
+      {
+      case off:
+        Serial.println("off");
+        data.pump_output_state = false;        
+        timerPumpOffDelay.stop();
+        if(data.door_switch_state)step = wait_for_prx;
+        else if(!data.door_switch_state)step = off;
+        
+        break;
+
+      case wait_for_prx:
+        Serial.println("wait_for_prx");
+        if(prx_trigged){
+          timerPumpOffDelay.setTimeout(setpoints.pump_off_delay * 1000);
+          data.pump_output_state = HIGH;
+          step = wait_for_T_off;          
+        }        
+        if(!data.door_switch_state)step = off;   
+        break;
+
+      case wait_for_T_off:
+        Serial.println("wait_for_T_off");
+        if(!data.door_switch_state || prx_trigged || timerPumpOffDelay.isReady() )step = off;        
+        break;      
+      
+      default:
+      break;
+      }
+
+      break;
+
+    default:
+    break;
+  }
+}
+//************************************************************************************

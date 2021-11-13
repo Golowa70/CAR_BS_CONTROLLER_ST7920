@@ -106,7 +106,7 @@ struct MyData
   float inside_temperature;       // температура внутри
   float fridge_temperature;        // температура третьего датчика(пока не используется)
   float sensors_supply_voltage;   // напряжение питания датчиков 5в
-  float res_sensor_resistance;    // сопротивление резистивного датчика
+  uint16_t res_sensor_resistance;    // сопротивление резистивного датчика
   
   uint8_t water_level_percent;    // уровень воды в процентах
   uint8_t water_level_liter;      // уровень воды в литрах
@@ -135,30 +135,30 @@ struct MyData
     0x3C, 0x3C, 0x3C, 0x3C, 0x3C, 0xFF, 0xFF, 0x7E, 0x3C, 0x18,
   };
 
-  //
-  const char p0[] PROGMEM = " Battery V:"; 
-  const char p1[] PROGMEM = " Water level:";
-  const char p2[] PROGMEM = " Temp outside:";
-  const char p3[] PROGMEM = " Temp inside:";
-  const char p4[] PROGMEM = " Temp fridge:"; 
-  const char p5[] PROGMEM = " Sensors V:";
-  const char p6[] PROGMEM = " RS Resistance:";
-  const char p7[] PROGMEM = " Door:";
-  const char p8[] PROGMEM = " Prx sensor:";
-  const char p9[] PROGMEM = " IGN";
-  const char p10[] PROGMEM = " LWW level:";
-  const char p11[] PROGMEM = " Conv relay:";
-  const char p12[] PROGMEM = " Fridge relay:";
-  const char p13[] PROGMEM = " Pump relay:";
-  const char p14[] PROGMEM = " Spare:";
-  const char p15[] PROGMEM = " 1Wire error :";
-  const char p16[] PROGMEM = " Water sens error:";
-  const char p17[] PROGMEM = " Sens supply error:";
-  const char p18[] PROGMEM = " Spare:";
-  const char p19[] PROGMEM = " Spare:";
+  /* массивы строк с именами пунктов меню просмотра параметров */
+  const char p0[] PROGMEM = "Battery V"; 
+  const char p1[] PROGMEM = "Water level";
+  const char p2[] PROGMEM = "Temp outside";
+  const char p3[] PROGMEM = "Temp inside";
+  const char p4[] PROGMEM = "Temp fridge"; 
+  const char p5[] PROGMEM = "Sensors V";
+  const char p6[] PROGMEM = "RS Resistance";
+  const char p7[] PROGMEM = "Door";
+  const char p8[] PROGMEM = "Prx sensor";
+  const char p9[] PROGMEM = "IGN";
+  const char p10[] PROGMEM = "LWW level";
+  const char p11[] PROGMEM = "Conv relay";
+  const char p12[] PROGMEM = "Fridge relay";
+  const char p13[] PROGMEM = "Pump relay";
+  const char p14[] PROGMEM = "Spare";
+  const char p15[] PROGMEM = "1Wire err";
+  const char p16[] PROGMEM = "Water sens err";
+  const char p17[] PROGMEM = "Sens supply err";
+  const char p18[] PROGMEM = "Spare";
+  const char p19[] PROGMEM = "Spare";
   
   
-
+/*Массив ссылок на имена пунктов  меню просмотра параметров, обращение к названию пунктов по их номеру*/
   const char* const parameters_names[] PROGMEM =           
   {
     p0,p1,p2,p3,p4,
@@ -170,43 +170,43 @@ struct MyData
   
 
   /* массивы строк с именами пунктов меню настроек */
-  const char i0[] PROGMEM = "Pump off delay:";  
-  const char i1[] PROGMEM = "Pump out mode:";
-  const char i2[] PROGMEM = "Conv U off:";
-  const char i3[] PROGMEM = "Conv T U off:";
-  const char i4[] PROGMEM = "Conv U on:";
-  const char i5[] PROGMEM = "Conv T U on:";
-  const char i6[] PROGMEM = "Conv T IGN off:";
-  const char i7[] PROGMEM = "Conv out mode:";
-  const char i8[] PROGMEM = "Fridge U off:";
-  const char i9[] PROGMEM = "Fridge T U off:";
-  const char i10[] PROGMEM = "Fridge U on:";
-  const char i11[] PROGMEM = "Fridge T U on:";
-  const char i12[] PROGMEM = "Fridge T IGN off:";
-  const char i13[] PROGMEM = "Fridge temp on:";
-  const char i14[] PROGMEM = "Fridge temp off:";
-  const char i15[] PROGMEM = "Fridge out mode:";
-  const char i16[] PROGMEM = "Res sens corr:";
-  const char i17[] PROGMEM = "Res sens nom:";
-  const char i18[] PROGMEM = "Water sens type:";
-  const char i19[] PROGMEM = "Water tank cap:";
-  const char i20[] PROGMEM = "MB slave ID:";
-  const char i21[] PROGMEM = "MB baud rate:";
-  const char i22[] PROGMEM = "Buzzer out mode:";
-  const char i23[] PROGMEM = "Screen off delay:";
-  const char i24[] PROGMEM = "Shutdown delay:";
-  const char i25[] PROGMEM = "U correction:";
-  const char i26[] PROGMEM = "Brightness:";
-  const char i27[] PROGMEM = "Logo:";
-  const char i28[] PROGMEM = "Inside sid:";
-  const char i29[] PROGMEM = "Outside sid:";
-  const char i30[] PROGMEM = "Fridge sid:";
-  const char i31[] PROGMEM = "Parametr 32:";
-  const char i32[] PROGMEM = "Parametr 33:";
-  const char i33[] PROGMEM = "Parametr 34:";
-  const char i34[] PROGMEM = "Parametr 35:";
+  const char i0[] PROGMEM = "Pump T off";  
+  const char i1[] PROGMEM = "Pump out mode";
+  const char i2[] PROGMEM = "Conv U off";
+  const char i3[] PROGMEM = "Conv T U off";
+  const char i4[] PROGMEM = "Conv U on";
+  const char i5[] PROGMEM = "Conv T U on";
+  const char i6[] PROGMEM = "Conv T IGN off";
+  const char i7[] PROGMEM = "Conv out mode";
+  const char i8[] PROGMEM = "Fridge U off";
+  const char i9[] PROGMEM = "Fridge T U off";
+  const char i10[] PROGMEM = "Fridge U on";
+  const char i11[] PROGMEM = "Fridge T U on";
+  const char i12[] PROGMEM = "Fridge T IGN off";
+  const char i13[] PROGMEM = "Fridge temp on";
+  const char i14[] PROGMEM = "Fridge temp off";
+  const char i15[] PROGMEM = "Fridge out mode";
+  const char i16[] PROGMEM = "Res sens corr";
+  const char i17[] PROGMEM = "Res sens nom";
+  const char i18[] PROGMEM = "Water sens type";
+  const char i19[] PROGMEM = "Water tank cap";
+  const char i20[] PROGMEM = "MB slave ID";
+  const char i21[] PROGMEM = "MB baud rate";
+  const char i22[] PROGMEM = "Buzzer out mode";
+  const char i23[] PROGMEM = "Screen off delay";
+  const char i24[] PROGMEM = "Shutdown delay";
+  const char i25[] PROGMEM = "U correction";
+  const char i26[] PROGMEM = "Brightness";
+  const char i27[] PROGMEM = "Logo";
+  const char i28[] PROGMEM = "Inside sid";
+  const char i29[] PROGMEM = "Outside sid";
+  const char i30[] PROGMEM = "Fridge sid";
+  const char i31[] PROGMEM = "Parametr 32";
+  const char i32[] PROGMEM = "Parametr 33";
+  const char i33[] PROGMEM = "Parametr 34";
+  const char i34[] PROGMEM = "Parametr 35";
   
-  /*Массив ссылок на имена пунктов меню, обращение к названию пунктов по их номеру*/
+  /*Массив ссылок на имена пунктов  меню настроек, обращение к названию пунктов по их номеру*/
   const char* const setpoints_menu_names[] PROGMEM =           
   {
     i0, i1, i2, i3, i4, 
@@ -327,10 +327,6 @@ static unsigned char water_level_50x50[] = {
 
    //***************************************************************************
 
-   enum Modes{off,on,auto_U,auto_T,auto_UT};
-   enum Modes converter_mode = off;
-   enum Modes fridge_mode = off;
 
-   
 
 #endif

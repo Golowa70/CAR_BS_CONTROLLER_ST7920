@@ -102,8 +102,8 @@
 
 #define VERSION "ver 4.0"
 #define DIVISION_RATIO_VOLTAGE_INPUT      0.0208      // разрешение 0.0025 уможить на коэфициент деления предусилителя 4.85(или делителя)
-#define DIVISION_RATIO_SENS_SUPPLY_INPUT  0.0106      // разрешение 0.0025(для TL431) или 0.00256 (для внутреннего опорного 2.56в) уможить на коэфициент деления предусилителя 4.16
-#define DIVISION_RATIO_RESIST_SENSOR      0.29       //0.278       //
+#define DIVISION_RATIO_SENS_SUPPLY_INPUT  0.0132     // разрешение 0.0025(для TL431) или 0.00256 (для внутреннего опорного 2.56в) уможить на коэфициент деления предусилителя 4.16
+#define DIVISION_RATIO_RESIST_SENSOR      0.278      //0.278       //
 
 #define MS_100        100           //  100ms
 #define SECOND       1000           //ms  секунда
