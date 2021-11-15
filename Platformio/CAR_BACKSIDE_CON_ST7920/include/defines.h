@@ -45,6 +45,14 @@
 #define ONE_WIRE_PIN         4
 #define DE_RS485_PIN         6   // in RS485.h
 
+#define MB_RATE_4800        0
+#define MB_RATE_7200        1
+#define MB_RATE_9600        2
+#define MB_RATE_19200       3
+#define MB_RATE_38400       4
+#define MB_RATE_57600       5
+
+
 // water level sensor
 #define WATER_LEVEL_LESS_THEN_25      1      
 #define WATER_LEVEL_25                2

@@ -48,7 +48,8 @@ void fnIOInit(void) {
         analogWrite(LCD_BLA_OUT, 127);
 }
 
-  void fnDefaultSetpointsInit(void){
+
+void fnDefaultSetpointsInit(void){
     default_setpoints_data.pump_off_delay = 10;
     default_setpoints_data.pump_out_mode = AUTO_MODE;  // Режим(авто, вкл, выкл).
     default_setpoints_data.converter_U_off = 115;    // дробное со смещённой вправо точкой 12.7в = 127,  13.2в =132 и т.д.
@@ -68,13 +69,13 @@ void fnIOInit(void) {
     default_setpoints_data.fridge_Temp_off = 7;  // Температура выключения Temp_off.
 
     default_setpoints_data.fridge_out_mode = AUTO_MODE;  // Режим(авто, авто с термостатом, вкл, выкл).
-    default_setpoints_data.resistive_sensor_correction = 127; // 127 нолевая коррекция
+    default_setpoints_data.resistive_sensor_correction = 0; // 0- нолевая коррекция
     default_setpoints_data.resistive_sensor_nominal = 190;    // 
     default_setpoints_data.water_sensor_type_selected = PJON_SENSOR_TYPE;
     default_setpoints_data.water_tank_capacity = WATER_TANK_CAPACITY;
 
     default_setpoints_data.mb_slave_ID = 2;
-    default_setpoints_data.mb_baud_rate = 1;
+    default_setpoints_data.mb_baud_rate = MB_RATE_9600;
     default_setpoints_data.buzzer_out_mode = ON_MODE;
     default_setpoints_data.scrreen_off_delay = 10;  //
     default_setpoints_data.shutdown_delay = 2;

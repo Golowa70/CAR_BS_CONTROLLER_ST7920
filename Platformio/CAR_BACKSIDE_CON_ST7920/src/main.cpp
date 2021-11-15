@@ -9,6 +9,8 @@
 #include <EEPROMex.h>
 #include <EEPROMVar.h>
 #include "PJONSoftwareBitBang.h"
+#include <ArduinoRS485.h>
+#include <ArduinoModbus.h>
 
 PJONSoftwareBitBang bus;
 
@@ -49,6 +51,12 @@ GTimer timerPeriodSensUpdate(MS);
 GTimer timerPjonSender(MS);
 GTimer timerPjonResponse(MS);
 GTimer timerMenuUpdate(MS);
+GTimer timerLowUConverterOffDelay(MS);
+GTimer timerConverterShutdownDelay(MS);
+GTimer timerLowUFridgeOffDelay(MS);
+GTimer timerFridgeShutdownDelay(MS);
+GTimer timerShutdownDelay(MS);
+GTimer timerSensSupplyCheck(MS);
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -76,6 +84,11 @@ void fnTempSensorsUpdate(void);
 void pj_receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info &packet_info);
 void fnPjonSender(void);
 void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, SetpointsStruct &setpoints, Alarms &alarms);
+void fnConverterControl(MyData &data, SetpointsStruct &setpoints);
+void fnFridgeControl(MyData &data, SetpointsStruct &setpoints);
+void fnMainPowerControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer);
+void fnSensorsSupplyControl(MyData &data, GTimer &timer, Alarms &alarms);
+void fnAlarms(MyData &data, Alarms &alarms);
 
 
 //обработчик прерывания от Timer3 
@@ -98,6 +111,8 @@ void setup() {
   fnDefaultSetpointsInit();
   fnIOInit();
 
+  digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
+
   if(fnEEpromInit()){
     u8g2.clearBuffer();
     u8g2.drawStr(40,30,"READY!");
@@ -112,6 +127,8 @@ void setup() {
     delay(1000);    
   }
   
+  digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
+
   temp_sensors.begin();
   temp_sensors.setResolution(thermometerID_1, TEMPERATURE_PRECISION);
   temp_sensors.setResolution(thermometerID_2, TEMPERATURE_PRECISION);
@@ -126,6 +143,19 @@ void setup() {
   timerPjonSender.setInterval(500);
   timerMenuUpdate.setInterval(200);
   timerPjonResponse.setTimeout(PJON_RESPONSE_TIMEOUT);
+  timerLowUConverterOffDelay.setMode(MANUAL);
+  timerLowUConverterOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_U_off) * MINUTE);
+  timerConverterShutdownDelay.setMode(MANUAL);
+  timerConverterShutdownDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_IGN_off) * MINUTE);
+  timerLowUFridgeOffDelay.setMode(MANUAL);
+  timerLowUFridgeOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_U_off) * MINUTE);
+  timerFridgeShutdownDelay.setMode(MANUAL);
+  timerFridgeShutdownDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_IGN_off) * MINUTE);
+  timerShutdownDelay.setMode(MANUAL);
+  timerShutdownDelay.setInterval(SetpointsUnion.setpoints_data.shutdown_delay * HOUR);
+  timerSensSupplyCheck.setMode(MANUAL);
+  timerSensSupplyCheck.setInterval(SENS_SUPPLY_CHECK_START_DELAY);
+  
 
   Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
   Timer3.enableISR(CHANNEL_A);
@@ -148,7 +178,11 @@ void setup() {
   bus.set_id(PJON_MY_ID); //  установка собственного ID   
   bus.set_receiver(pj_receiver_function);
 
-  digitalWrite(SENSORS_SUPPLY_5v, HIGH);
+  ModbusRTUServer.begin(SetpointsUnion.setpoints_data.mb_slave_ID, main_data.mb_rates[SetpointsUnion.setpoints_data.mb_baud_rate]); // настройка порта в файле RS485.cpp в конце
+  ModbusRTUServer.configureCoils(0x00, 10);
+  ModbusRTUServer.configureHoldingRegisters(0x00, 10);
+
+  main_data.flag_system_started = true;
   
 }
 //**********************************************************************************************
@@ -156,7 +190,8 @@ void setup() {
 
 void loop() {
   
-  digitalWrite(SENSORS_SUPPLY_5v, HIGH);
+  digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
+  //digitalWrite(SENSORS_SUPPLY_5v, HIGH);
   fnInputsUpdate();
   
   main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
@@ -164,7 +199,7 @@ void loop() {
   main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR) -127 + SetpointsUnion.setpoints_data.resistive_sensor_correction) * DIVISION_RATIO_RESIST_SENSOR);
 
   
-  //меню----------------------------------------------------------------------
+  /*------------ Menu -----------------*/
   if(timerMenuUpdate.isReady()){
     //определение текущей страницы меню
     if(menu_current_item < display_num_lines) menu_current_page = 0;  
@@ -264,24 +299,56 @@ void loop() {
     }
 
   }
-  //конец меню
+  //end menu
 
 
   fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
   //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
   fnTempSensorsUpdate();
   fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
+  fnConverterControl(main_data, SetpointsUnion.setpoints_data);
+  fnFridgeControl(main_data, SetpointsUnion.setpoints_data);
+  fnMainPowerControl(main_data, SetpointsUnion.setpoints_data, timerShutdownDelay); 
+  fnSensorsSupplyControl(main_data, timerSensSupplyCheck, present_alarms); 
+  fnAlarms(main_data, present_alarms);
 
+  //pjon
   if(timerPjonSender.isReady())fnPjonSender();
   if(timerPjonResponse.isReady())flag_pjon_water_sensor_connected = false;
   bus.receive(1000);  
   bus.update();
 
+  // ********* ModBus registers update ******************************
+  ModbusRTUServer.coilWrite(0x00, main_data.ignition_switch_state);
+  ModbusRTUServer.coilWrite(0x01, main_data.door_switch_state);
+  ModbusRTUServer.coilWrite(0x02, main_data.proximity_sensor_state);
+  ModbusRTUServer.coilWrite(0x03, main_data.pump_output_state);
+  ModbusRTUServer.coilWrite(0x04, main_data.converter_output_state);
+  ModbusRTUServer.coilWrite(0x05, main_data.fridge_output_state);
+  ModbusRTUServer.coilWrite(0x06, flag_pjon_water_sensor_connected);
+  ModbusRTUServer.coilWrite(0x07, 0);
+  ModbusRTUServer.coilWrite(0x08, main_data.sensors_supply_output_state);
+  ModbusRTUServer.coilWrite(0x09, main_data.low_washer_water_level); //
+
+  ModbusRTUServer.holdingRegisterWrite(0x00, main_data.battery_voltage * 10);
+  ModbusRTUServer.holdingRegisterWrite(0x01, main_data.inside_temperature * 10);
+  ModbusRTUServer.holdingRegisterWrite(0x02, main_data.outside_temperature * 10);
+  ModbusRTUServer.holdingRegisterWrite(0x03, main_data.water_level_percent);
+  ModbusRTUServer.holdingRegisterWrite(0x04, main_data.water_level_liter);
+
+  ModbusRTUServer.holdingRegisterWrite(0x05, main_data.sensors_supply_voltage * 10);
+  ModbusRTUServer.holdingRegisterWrite(0x06, main_data.res_sensor_resistance);
+  ModbusRTUServer.holdingRegisterWrite(0x07, ErrorLog.pj_water_sensor_error_cnt);
+  ModbusRTUServer.holdingRegisterWrite(0x08, ErrorLog.sens_supply_error_cnt);
+  ModbusRTUServer.holdingRegisterWrite(0x09, ErrorLog.temp_sensors_error_cnt);
+
+  ModbusRTUServer.poll();
+
   fnOutputsUpdate(main_data);
 
 }
+//****** end loop **************************************************************************************************
 
-//************************************************************************************************************
 // 
 void fnPrintSelectionFrame(uint8_t item_pointer) {
 
@@ -1182,6 +1249,9 @@ void fnPumpControl(MyData &data, SetpointsStruct &setpoints){
 //---------------
 void fnInputsUpdate(void){
 
+  static uint8_t inputs_undebounced_sample = 0;
+  static uint8_t inputs_debounced_state = 0;
+
   if (!digitalRead(DOOR_SWITCH_INPUT_1))inputs_undebounced_sample |= (1 << 0);
   else  inputs_undebounced_sample &= ~(1 << 0);
 
@@ -1237,41 +1307,52 @@ void fnOutputsUpdate(MyData &data)
 //-----------
 void fnTempSensorsUpdate(void){
 
-  static uint8_t temp_cnt;
+  static uint8_t temp_cnt = 1;
   static bool flag_ds18b20_update = false;
 
-  if(timerPeriodSensUpdate.isReady()){
-  
-    if (!flag_ds18b20_update){
-      flag_ds18b20_update = true;
-      temp_sensors.requestTemperatures(); //команда начала преобразования
-    }
-    else
-    {
-      switch (temp_cnt){
+  if (temp_sensors_data.num_saved_sensors > 0){
+ 
+    if(timerPeriodSensUpdate.isReady()){
+    
+      if (!flag_ds18b20_update){
+        flag_ds18b20_update = true;
+        temp_sensors.requestTemperatures(); //команда начала преобразования
+      }
+      else
+      {
+        present_alarms.temp_sensors = false;  
+           
+        switch (temp_cnt){
 
-        case 0:
-          main_data.inside_temperature = temp_sensors.getTempC(thermometerID_1);
-          Serial.println(main_data.inside_temperature);
-          temp_cnt++;
+          case 1:
+            main_data.inside_temperature = temp_sensors.getTempC(thermometerID_1);
+            if (main_data.inside_temperature == DEVICE_DISCONNECTED_C)present_alarms.temp_sensors = true;
+            Serial.println(main_data.inside_temperature);
+            break;
+
+          case 2:
+            main_data.outside_temperature = temp_sensors.getTempC(thermometerID_2);
+            if (main_data.outside_temperature == DEVICE_DISCONNECTED_C)present_alarms.temp_sensors = true;
+            Serial.println(main_data.outside_temperature);
+            break;
+
+          case 3:
+            main_data.fridge_temperature = temp_sensors.getTempC(thermometerID_3);
+            if (main_data.fridge_temperature == DEVICE_DISCONNECTED_C)present_alarms.temp_sensors = true;
+            Serial.println(main_data.fridge_temperature);
+            break;
+
+          default:
+            temp_cnt = 1;
           break;
+        }
 
-        case 1:
-          main_data.outside_temperature = temp_sensors.getTempC(thermometerID_2);
-          Serial.println(main_data.outside_temperature);
-          temp_cnt++;
-          break;
-
-        case 2:
-          main_data.fridge_temperature = temp_sensors.getTempC(thermometerID_3);
-          Serial.println(main_data.fridge_temperature);
-          temp_cnt = 0;
+        temp_cnt++ ;
+        if(temp_cnt > temp_sensors_data.num_saved_sensors){
+          temp_cnt = 1;
           flag_ds18b20_update = false;
-          break;
+        }
 
-        default:
-          temp_cnt = 0;
-        break;
       }
     }
   }
@@ -1370,7 +1451,6 @@ void fnPjonSender(void){
 //*******************************************************************************************
 
 // fnWaterLevelControl
-
 void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, SetpointsStruct &setpoints, Alarms &alarms)
 {
   float water_tank_capacity_temp_value = (float)setpoints.water_tank_capacity; // для вычисления дробных значений
@@ -1381,7 +1461,7 @@ void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, Setp
   case WATER_FLOAT_SENSOR_PJ:
 
     alarms.pj_water_sensor = !flag_pjon_water_sensor_connected;
-    alarms.resist_sensor = false;
+    alarms.resist_water_sensor = false;
 
     switch (pj_sensor_receive_data.value)
     {
@@ -1435,14 +1515,14 @@ void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, Setp
         alarms.pj_water_sensor = false;
 
         data.water_level_liter = data.res_sensor_resistance * (water_tank_capacity_temp_value / setpoints.resistive_sensor_nominal);
-        if (data.res_sensor_resistance > (setpoints.resistive_sensor_nominal + 10))
+        if (data.res_sensor_resistance > ((uint16_t)setpoints.resistive_sensor_nominal + 10))
         {
           data.water_level_liter = 0;  //
-          alarms.resist_sensor = true; //
+          alarms.resist_water_sensor = true; //
         }
         else
         {
-          alarms.resist_sensor = false;
+          alarms.resist_water_sensor = false;
         }
 
         data.water_level_percent = (uint8_t)data.water_level_liter / (setpoints.water_tank_capacity * 0.01); // литры в проценты
@@ -1453,3 +1533,245 @@ void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, Setp
   }
 }
 //*******************************************************************************************
+
+//convreter control
+void fnConverterControl(MyData &data, SetpointsStruct &setpoints)
+{
+  uint8_t voltage = (uint8_t)data.battery_voltage * 10;
+  static bool flag_convOff_due_voltage;    // флаг что конветер был выключен по напряжению
+  static bool flag_convOff_due_ign_switch; // флаг что конветер был выключен по таймеру после выключения зажигания
+
+  static bool state = HIGH; // изначально (после старта) включен
+
+  switch (setpoints.convertet_out_mode){
+      
+    case OFF_MODE:
+      state = LOW;
+      timerLowUConverterOffDelay.stop();  // останавливаем таймер выключения
+      timerConverterShutdownDelay.stop(); 
+      break;
+
+    case ON_MODE:
+      state = HIGH;
+      timerLowUConverterOffDelay.stop();  // останавливаем таймер выключения
+      timerConverterShutdownDelay.stop();
+      break;
+
+    case AUTO_MODE:
+
+      if (voltage >= SetpointsUnion.setpoints_data.converter_U_on)
+      { 
+        if (!flag_convOff_due_ign_switch)state = HIGH; // если напряжение в пределах нормы включаем преобразователь
+        flag_convOff_due_voltage = LOW;    // флаг что было отключение по низкому напряжению
+        timerLowUConverterOffDelay.stop(); // останавливваем таймер выключения
+      }
+
+      if (voltage > SetpointsUnion.setpoints_data.converter_U_off)
+      {                                                                                                     
+        timerLowUConverterOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_U_off) * MINUTE); // заряжаем таймер на выключение
+      }
+
+      else
+      {
+        if (timerLowUConverterOffDelay.isReady())
+        {
+          state = LOW;
+          flag_convOff_due_voltage = HIGH;   // флаг что было отключение по низкому напряжению
+          timerLowUConverterOffDelay.stop(); // останавливаем таймер выключения
+        }
+      }
+
+      // отключение по таймеру после выключения зажигания
+      if (data.ignition_switch_state)
+      {
+        flag_convOff_due_ign_switch = LOW; //сброс флага что было отключение по ignition switch
+        if (!flag_convOff_due_voltage)state = HIGH;
+        timerConverterShutdownDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_IGN_off) * MINUTE);
+      }
+      else
+      {
+        if (timerConverterShutdownDelay.isReady())
+        {
+          state = LOW;
+          flag_convOff_due_ign_switch = HIGH; //установка флага что было отключение по ignition switch
+        }
+      }
+
+      break;
+
+    default:
+    break;
+  }
+
+  data.converter_output_state = state;
+}
+//*****************************************************************************************
+
+//convreter control
+void fnFridgeControl(MyData &data, SetpointsStruct &setpoints)
+{
+  uint8_t voltage = (uint8_t)data.battery_voltage * 10;
+  static bool flag_fridgeOff_due_voltage;    // флаг что конветер был выключен по напряжению
+  static bool flag_fridgeOff_due_ign_switch; // флаг что конветер был выключен по таймеру после выключения зажигания
+
+  static bool state = HIGH; // изначально (после старта) включен
+
+  switch (setpoints.fridge_out_mode){
+      
+    case OFF_MODE:
+      state = LOW;
+      timerLowUFridgeOffDelay.stop();  // останавливаем таймер выключения
+      timerFridgeShutdownDelay.stop(); 
+      break;
+
+    case ON_MODE:
+      state = HIGH;
+      timerLowUFridgeOffDelay.stop();  // останавливаем таймер выключения
+      timerFridgeShutdownDelay.stop();
+      break;
+
+    case AUTO_MODE:
+
+      if (voltage >= SetpointsUnion.setpoints_data.fridge_U_on)
+      { 
+        if (!flag_fridgeOff_due_ign_switch)state = HIGH; // если напряжение в пределах нормы включаем преобразователь
+        flag_fridgeOff_due_voltage = LOW;    // флаг что было отключение по низкому напряжению
+        timerLowUFridgeOffDelay.stop(); // останавливваем таймер выключения
+      }
+
+      if (voltage > SetpointsUnion.setpoints_data.fridge_U_off)
+      {                                                                                                     
+        timerLowUFridgeOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_U_off) * MINUTE); // заряжаем таймер на выключение
+      }
+
+      else
+      {
+        if (timerLowUFridgeOffDelay.isReady())
+        {
+          state = LOW;
+          flag_fridgeOff_due_voltage = HIGH;   // флаг что было отключение по низкому напряжению
+          timerLowUFridgeOffDelay.stop(); // останавливаем таймер выключения
+        }
+      }
+
+      // отключение по таймеру после выключения зажигания
+      if (data.ignition_switch_state)
+      {
+        flag_fridgeOff_due_ign_switch = LOW; //сброс флага что было отключение по ignition switch
+        if (!flag_fridgeOff_due_voltage)state = HIGH;
+        timerFridgeShutdownDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_IGN_off) * MINUTE);
+      }
+      else
+      {
+        if (timerFridgeShutdownDelay.isReady())
+        {
+          state = LOW;
+          flag_fridgeOff_due_ign_switch = HIGH; //установка флага что было отключение по ignition switch
+        }
+      }
+
+      break;
+
+    default:
+    break;
+  }
+
+  data.fridge_output_state = state;
+}
+//*****************************************************************************************
+
+// Main power control 
+void fnMainPowerControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer)
+{
+  bool state = true;
+
+  if(data.ignition_switch_state)
+  {
+    timer.setInterval((uint32_t)setpoints.shutdown_delay * HOUR);
+    state = true;
+  }
+  else
+  {
+    if(timer.isReady())state = false;
+  }
+
+  data.main_supply_output_state = state;
+}
+//**********************************************************************
+
+// Sensors Supply Control
+void fnSensorsSupplyControl(MyData &data, GTimer &timer, Alarms &alarms)
+{
+  static uint8_t step = 0;
+  static uint8_t sens_supply_check_cnt = 0;
+  static bool state = true;
+
+  if (timer.isReady())
+  {
+    switch (step)
+    {
+      case 0:
+        state = true;
+        timer.setInterval(SENS_SUPPLY_CHECK_PERIOD);
+        step = 1;
+        break;
+
+      case 1:
+        if (data.sensors_supply_voltage < SENS_SUPPLY_CHECK_MIN_V)
+        {
+          sens_supply_check_cnt++;
+          timer.setInterval(SENS_SUPPLY_CHECK_PERIOD);
+        }
+        else
+        {
+          if (sens_supply_check_cnt)sens_supply_check_cnt--;
+        }
+
+        if (sens_supply_check_cnt > SENS_SUPPLY_CHECK_TIMES)step = 2;
+        break;
+
+      case 2:
+        state = false;
+        alarms.sens_supply = true;
+        timer.setInterval(SENS_SUPPLY_CHECK_PERIOD * 3);
+        step = 3;
+        break;
+
+      case 3:
+        if (!alarms.sens_supply)
+        {
+          state = true;
+          step = 0;
+          sens_supply_check_cnt = 0;
+        }
+
+        timer.setInterval(SENS_SUPPLY_CHECK_START_DELAY); // задержка как при старте
+        break;
+
+      default:
+      break;
+    }
+  }
+
+  data.sensors_supply_output_state = state;
+}
+//******************************************************************
+
+//-------
+void fnAlarms(MyData &data, Alarms &alarms){
+
+  if(main_data.flag_system_started){
+
+    if (alarms.sens_supply || alarms.resist_water_sensor || alarms.pj_water_sensor || alarms.temp_sensors)
+    {
+      alarms.common = true;
+    }
+    else
+    {          
+      alarms.common = false;
+    }
+  }
+
+}
+//**************************************************************************************
+

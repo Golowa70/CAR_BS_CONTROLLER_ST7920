@@ -242,7 +242,7 @@ struct MyData
 //***********************************************************************************
 
 //********** ONE WIRE VARIABLES *****************************************************
-  bool flag_ow_scanned;
+ 
   bool flag_ow_scan_to_start;
   bool flag_ds18b20_update; // флаг обновлени чтения температуры с ds18b20
 //***********************************************************************************
@@ -253,13 +253,8 @@ uint8_t display_width;
 uint8_t display_num_lines;
 
 //********* OTHER VARIABLES *********************************************************
-bool flag_door_switch_old_state; // предыдущее состояние двери
 
-bool flag_convOff_due_voltage;    // флаг что конветер был выключен по напряжению
-bool flag_convOff_due_ign_switch; // флаг что конветер был выключен по таймеру после выключения зажигания
 
-uint8_t inputs_undebounced_sample = 0;
-uint8_t inputs_debounced_state = 0;
 
 //***********************************************************************************
 
@@ -274,10 +269,11 @@ struct ErrLog
 
 struct Alarms
 {
+  bool eeprom_init;
   bool sens_supply;
-  bool pj_water_sensor;
   bool temp_sensors;
-  bool resist_sensor;
+  bool pj_water_sensor;
+  bool resist_water_sensor;
   bool common;
 } present_alarms,old_alarms;
 
