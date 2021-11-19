@@ -37,7 +37,7 @@
 #define EEPROM_1WIRE_ADDRESS       0x40
 #define EEPROM_ERROR_LOG_ADDRES    0x80
 
-#define EEPROM_KEY         0x12  //ключь для определения записаны ли уставки в память EEPROM или это первая запись
+#define EEPROM_KEY         0x12 //ключь для определения записаны ли уставки в память EEPROM или это первая запись
 
 
 //communications
@@ -117,7 +117,7 @@
 #define HOUR         3600000        //ms  час
 
 
-#define START_DELAY                 3000  //ms задержка выполнения некоторых функций после подачи питания (пока датчики запустятся)
+#define START_DELAY                 1000  //ms задержка выполнения некоторых функций после подачи питания (пока датчики запустятся)
 #define PRX_SENSOR_FEEDBACK_DELAY   500   //ms задержка реакции датчика приближения (для стабильности)
 #define WDT_RESET_PERIOD            500000  // us период сброса ADM705 < 1.6 sec
 
@@ -128,6 +128,7 @@
 #define MENU_PARAM_VIEW                 1
 #define MENU_SETPOINTS                  2
 #define MENU_SETPOINTS_EDIT_MODE        3
+#define MENU_LOGO_VIEW                  4
 
 
 #define LCD_LINE_SPACER                 4

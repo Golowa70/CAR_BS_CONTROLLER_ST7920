@@ -83,10 +83,10 @@ void fnDefaultSetpointsInit(void){
     default_setpoints_data.voltage_correction = 127; // 127 - нолевая коррекция
     default_setpoints_data.lcd_brightness = 100;
     default_setpoints_data.logo_selection = 0;
-    default_setpoints_data.inside_sensor_id = 0;
-    default_setpoints_data.outside_sensor_id = 1;
+    default_setpoints_data.inside_sensor_id = 1;
+    default_setpoints_data.outside_sensor_id = 2;
 
-    default_setpoints_data.fridge_sensor_id = 2;
+    default_setpoints_data.fridge_sensor_id = 3;
     default_setpoints_data.spare_1 = 0;
     default_setpoints_data.spare_2 = 0;
     default_setpoints_data.spare_3 = 0;

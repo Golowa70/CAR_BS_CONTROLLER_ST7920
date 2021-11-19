@@ -57,6 +57,7 @@ GTimer timerLowUFridgeOffDelay(MS);
 GTimer timerFridgeShutdownDelay(MS);
 GTimer timerShutdownDelay(MS);
 GTimer timerSensSupplyCheck(MS);
+GTimer timerStartDelay(MS);   // таймер задержки опроса входов после старта
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -89,6 +90,8 @@ void fnFridgeControl(MyData &data, SetpointsStruct &setpoints);
 void fnMainPowerControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer);
 void fnSensorsSupplyControl(MyData &data, GTimer &timer, Alarms &alarms);
 void fnAlarms(MyData &data, Alarms &alarms);
+void fnBuzzerProcess(MyData &data, Alarms &alarms);
+
 
 
 //обработчик прерывания от Timer3 
@@ -97,6 +100,7 @@ ISR(TIMER3_A)
   buttonUp.tick();
   buttonDown.tick();
   buttonEnter.tick();
+
 }
 //**********************************************************************************
 
@@ -113,10 +117,16 @@ void setup() {
 
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
 
+  u8g2.clearBuffer();
+  u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+  u8g2.sendBuffer();
+  delay(1000);
+
   if(fnEEpromInit()){
     u8g2.clearBuffer();
     u8g2.drawStr(40,30,"READY!");
     u8g2.sendBuffer();
+    tone(BUZZER,500,200);
     delay(1000);
   } 
   else {
@@ -124,7 +134,10 @@ void setup() {
     u8g2.drawStr(40,30,"ERROR!");
     u8g2.sendBuffer();
     memcpy(&SetpointsUnion.setpoints_data, &default_setpoints_data, sizeof(SetpointsUnion.setpoints_data));//
-    delay(1000);    
+    tone(BUZZER,1000,200);
+    delay(400);
+    tone(BUZZER,1000,200);
+    delay(400);    
   }
   
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
@@ -144,17 +157,18 @@ void setup() {
   timerMenuUpdate.setInterval(200);
   timerPjonResponse.setTimeout(PJON_RESPONSE_TIMEOUT);
   timerLowUConverterOffDelay.setMode(MANUAL);
-  timerLowUConverterOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_U_off) * MINUTE);
+  timerLowUConverterOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_U_off) * SECOND);
   timerConverterShutdownDelay.setMode(MANUAL);
   timerConverterShutdownDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_IGN_off) * MINUTE);
   timerLowUFridgeOffDelay.setMode(MANUAL);
-  timerLowUFridgeOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_U_off) * MINUTE);
+  timerLowUFridgeOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_U_off) * SECOND);
   timerFridgeShutdownDelay.setMode(MANUAL);
   timerFridgeShutdownDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_IGN_off) * MINUTE);
   timerShutdownDelay.setMode(MANUAL);
   timerShutdownDelay.setInterval(SetpointsUnion.setpoints_data.shutdown_delay * HOUR);
   timerSensSupplyCheck.setMode(MANUAL);
   timerSensSupplyCheck.setInterval(SENS_SUPPLY_CHECK_START_DELAY);
+  timerStartDelay.setMode(MANUAL);
   
 
   Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
@@ -182,7 +196,7 @@ void setup() {
   ModbusRTUServer.configureCoils(0x00, 10);
   ModbusRTUServer.configureHoldingRegisters(0x00, 10);
 
-  main_data.flag_system_started = true;
+  timerStartDelay.setInterval(START_DELAY);
   
 }
 //**********************************************************************************************
@@ -197,7 +211,7 @@ void loop() {
   main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
   main_data.sensors_supply_voltage = (analogRead(SENSORS_VOLTAGE_INPUT) * DIVISION_RATIO_SENS_SUPPLY_INPUT);
   main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR) -127 + SetpointsUnion.setpoints_data.resistive_sensor_correction) * DIVISION_RATIO_RESIST_SENSOR);
-
+  
   
   /*------------ Menu -----------------*/
   if(timerMenuUpdate.isReady()){
@@ -222,6 +236,10 @@ void loop() {
         }
         if(buttonDown.isClick()){
           menu_mode = MENU_PARAM_VIEW;
+          menu_current_item = 0;
+        }
+        if(buttonEnter.isClick()){
+          menu_mode = MENU_LOGO_VIEW;
           menu_current_item = 0;
         }
         break;
@@ -291,6 +309,26 @@ void loop() {
 
         break;
       
+      case MENU_LOGO_VIEW:
+
+        u8g2.clearBuffer();
+        u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+        u8g2.sendBuffer();
+
+        if(buttonUp.isClick()){
+          menu_mode = MENU_SETPOINTS;
+          menu_current_item = 0;
+        }
+        if(buttonDown.isClick()){
+          menu_mode = MENU_PARAM_VIEW;
+          menu_current_item = 0;
+        }
+        if(buttonEnter.isClick()){
+          menu_mode = MENU_MAIN_VIEW;
+          menu_current_item = 0;
+        }
+
+        break;
 
       default:
       
@@ -301,16 +339,21 @@ void loop() {
   }
   //end menu
 
+  if(timerStartDelay.isReady())main_data.flag_system_started = true;
 
-  fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
-  //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
-  fnTempSensorsUpdate();
-  fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
-  fnConverterControl(main_data, SetpointsUnion.setpoints_data);
-  fnFridgeControl(main_data, SetpointsUnion.setpoints_data);
-  fnMainPowerControl(main_data, SetpointsUnion.setpoints_data, timerShutdownDelay); 
-  fnSensorsSupplyControl(main_data, timerSensSupplyCheck, present_alarms); 
-  fnAlarms(main_data, present_alarms);
+  if(main_data.flag_system_started == true){
+
+    fnTempSensorsUpdate();
+    fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
+    //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
+    fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
+    fnConverterControl(main_data, SetpointsUnion.setpoints_data);
+    fnFridgeControl(main_data, SetpointsUnion.setpoints_data);
+    fnMainPowerControl(main_data, SetpointsUnion.setpoints_data, timerShutdownDelay); 
+    fnSensorsSupplyControl(main_data, timerSensSupplyCheck, present_alarms); 
+    fnAlarms(main_data, present_alarms);
+    fnBuzzerProcess(main_data, present_alarms);
+  }
 
   //pjon
   if(timerPjonSender.isReady())fnPjonSender();
@@ -338,9 +381,9 @@ void loop() {
 
   ModbusRTUServer.holdingRegisterWrite(0x05, main_data.sensors_supply_voltage * 10);
   ModbusRTUServer.holdingRegisterWrite(0x06, main_data.res_sensor_resistance);
-  ModbusRTUServer.holdingRegisterWrite(0x07, ErrorLog.pj_water_sensor_error_cnt);
-  ModbusRTUServer.holdingRegisterWrite(0x08, ErrorLog.sens_supply_error_cnt);
-  ModbusRTUServer.holdingRegisterWrite(0x09, ErrorLog.temp_sensors_error_cnt);
+  ModbusRTUServer.holdingRegisterWrite(0x07, 0);
+  ModbusRTUServer.holdingRegisterWrite(0x08, 0);
+  ModbusRTUServer.holdingRegisterWrite(0x09, 0);
 
   ModbusRTUServer.poll();
 
@@ -415,7 +458,7 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
   switch (num_item)
   {
   case 0:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%ds", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 1:
@@ -445,7 +488,7 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;  
 
   case 3:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%ds", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 4:
@@ -456,15 +499,29 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 5:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%ds", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 6:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%dm", SetpointsUnion.SetpointsArray[num_item]);
     break;
   
   case 7:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    switch (SetpointsUnion.SetpointsArray[num_item])
+    {
+    case OFF_MODE:
+      sprintf(buffer, "off");
+      break;    
+    case ON_MODE:
+      sprintf(buffer, "on");
+      break;
+    case AUTO_MODE:
+      sprintf(buffer, "auto");
+      break;      
+    default:
+      break;
+    }
+
     break;
 
   case 8:
@@ -475,7 +532,7 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 9:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%ds", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 10:
@@ -486,23 +543,37 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 11:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%ds", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 12:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%dm", SetpointsUnion.SetpointsArray[num_item]);
     break;
   
   case 13:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%dC", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 14:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%dC", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 15:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    switch (SetpointsUnion.SetpointsArray[num_item])
+    {
+    case OFF_MODE:
+      sprintf(buffer, "off");
+      break;    
+    case ON_MODE:
+      sprintf(buffer, "on");
+      break;
+    case AUTO_MODE:
+      sprintf(buffer, "auto");
+      break;      
+    default:
+      break;
+    }
+
     break;
 
   case 16:
@@ -532,7 +603,7 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
   
   case 19:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%dL", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 20:
@@ -544,22 +615,32 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 22:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+
+    switch (SetpointsUnion.SetpointsArray[num_item])
+    {
+    case 0:
+      sprintf(buffer,"OFF");
+      break;
+    case 1:
+      sprintf(buffer,"ON");
+      break;
+    
+    default:
+      break;
+    }
+    
     break;
 
   case 23:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%ds", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 24:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer, "%dh", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 25:
-    float_m = SetpointsUnion.SetpointsArray[num_item];
-    float_n = float_m%10;
-    float_m = float_m/10;
-    sprintf(buffer,"%d.%d",float_m, float_n);
+    sprintf(buffer,"%d",SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 26:
@@ -1514,7 +1595,7 @@ void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, Setp
 
         alarms.pj_water_sensor = false;
 
-        data.water_level_liter = data.res_sensor_resistance * (water_tank_capacity_temp_value / setpoints.resistive_sensor_nominal);
+        data.water_level_liter = (uint8_t)(data.res_sensor_resistance * (water_tank_capacity_temp_value / setpoints.resistive_sensor_nominal));
         if (data.res_sensor_resistance > ((uint16_t)setpoints.resistive_sensor_nominal + 10))
         {
           data.water_level_liter = 0;  //
@@ -1568,7 +1649,7 @@ void fnConverterControl(MyData &data, SetpointsStruct &setpoints)
 
       if (voltage > SetpointsUnion.setpoints_data.converter_U_off)
       {                                                                                                     
-        timerLowUConverterOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_U_off) * MINUTE); // заряжаем таймер на выключение
+        timerLowUConverterOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.converter_T_U_off) * SECOND); // заряжаем таймер на выключение
       }
 
       else
@@ -1607,7 +1688,7 @@ void fnConverterControl(MyData &data, SetpointsStruct &setpoints)
 }
 //*****************************************************************************************
 
-//convreter control
+//fridge control
 void fnFridgeControl(MyData &data, SetpointsStruct &setpoints)
 {
   uint8_t voltage = (uint8_t)data.battery_voltage * 10;
@@ -1641,7 +1722,7 @@ void fnFridgeControl(MyData &data, SetpointsStruct &setpoints)
 
       if (voltage > SetpointsUnion.setpoints_data.fridge_U_off)
       {                                                                                                     
-        timerLowUFridgeOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_U_off) * MINUTE); // заряжаем таймер на выключение
+        timerLowUFridgeOffDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_U_off) * SECOND); // заряжаем таймер на выключение
       }
 
       else
@@ -1774,4 +1855,59 @@ void fnAlarms(MyData &data, Alarms &alarms){
 
 }
 //**************************************************************************************
+
+
+// Buzzer Process
+void fnBuzzerProcess(MyData &data, Alarms &alarms){
+
+  static bool door_old_state = data.door_switch_state;
+  static bool pump_out_old_state = data.pump_output_state;
+  static bool conv_out_old_state = data.converter_output_state;
+  static bool fridge_out_old_state = data.fridge_output_state;
+  static bool common_alarm_old_state = alarms.common;
+
+  if(SetpointsUnion.setpoints_data.buzzer_out_mode){
+    
+
+    if(door_old_state != data.door_switch_state && data.door_switch_state == true){
+
+      if(data.water_level_liter < (SetpointsUnion.setpoints_data.water_tank_capacity/4)){
+        tone(BUZZER,1000,1000);
+      }
+      else{
+        tone(BUZZER,1000,50);
+      }     
+    }
+    door_old_state = data.door_switch_state;
+ 
+    if(pump_out_old_state != data.pump_output_state){
+      tone(BUZZER,1000,200);
+      pump_out_old_state = data.pump_output_state;
+    }
+
+    if(conv_out_old_state != data.converter_output_state){
+      tone(BUZZER,1000,200);
+      conv_out_old_state = data.converter_output_state;
+    }
+
+    if(fridge_out_old_state != data.fridge_output_state){
+      tone(BUZZER,1000,200);
+      fridge_out_old_state = data.fridge_output_state;
+    }
+
+    if(common_alarm_old_state != alarms.common && alarms.common == true){
+      tone(BUZZER,5000,100);
+    }
+    common_alarm_old_state = alarms.common;
+
+
+
+  }
+  else {
+    noTone(BUZZER);
+  }
+
+}
+
+//********************************************************************************
 
