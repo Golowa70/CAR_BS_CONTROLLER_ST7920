@@ -166,7 +166,7 @@ void setup() {
   timerFridgeShutdownDelay.setMode(MANUAL);
   timerFridgeShutdownDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_IGN_off) * MINUTE);
   timerShutdownDelay.setMode(MANUAL);
-  timerShutdownDelay.setInterval(SetpointsUnion.setpoints_data.shutdown_delay * HOUR);
+  timerShutdownDelay.setTimeout(SetpointsUnion.setpoints_data.shutdown_delay * MINUTE);
   timerSensSupplyCheck.setMode(MANUAL);
   timerSensSupplyCheck.setInterval(SENS_SUPPLY_CHECK_START_DELAY);
   timerStartDelay.setMode(MANUAL);
@@ -1768,11 +1768,11 @@ void fnFridgeControl(MyData &data, SetpointsStruct &setpoints)
 // Main power control 
 void fnMainPowerControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer)
 {
-  bool state = true;
+  static bool state = true;
 
   if(data.ignition_switch_state)
   {
-    timer.setInterval((uint32_t)setpoints.shutdown_delay * HOUR);
+    timer.setTimeout((uint32_t)setpoints.shutdown_delay * MINUTE);
     state = true;
   }
   else
