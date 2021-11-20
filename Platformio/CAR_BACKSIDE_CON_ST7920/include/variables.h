@@ -66,7 +66,7 @@ struct SetpointsStruct { // структура для уставок
   uint8_t spare_4;
 
   uint8_t key;
-  uint8_t crc8;
+  uint8_t crc8;  // пока не реализовано
   
 }default_setpoints_data;
 

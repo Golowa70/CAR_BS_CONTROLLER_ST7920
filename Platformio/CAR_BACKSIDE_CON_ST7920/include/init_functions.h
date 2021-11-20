@@ -41,7 +41,7 @@ void fnIOInit(void) {
         digitalWrite(FRIDGE_OUTPUT_2, LOW);
         digitalWrite(CONVERTER_OUTPUT_3, LOW);
         digitalWrite(SENSORS_SUPPLY_5v, LOW);
-        digitalWrite(MAIN_SUPPLY_OUT, LOW);
+        digitalWrite(MAIN_SUPPLY_OUT, HIGH);
         digitalWrite(BUZZER, LOW);
         digitalWrite(BUILTIN_LED, LOW);
         digitalWrite(WDT_RESET_OUT, LOW);

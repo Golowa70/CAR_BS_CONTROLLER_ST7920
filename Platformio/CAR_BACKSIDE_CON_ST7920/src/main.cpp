@@ -58,6 +58,7 @@ GTimer timerFridgeShutdownDelay(MS);
 GTimer timerShutdownDelay(MS);
 GTimer timerSensSupplyCheck(MS);
 GTimer timerStartDelay(MS);   // таймер задержки опроса входов после старта
+GTimer timerBrightnessOff(MS);
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -91,7 +92,7 @@ void fnMainPowerControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer)
 void fnSensorsSupplyControl(MyData &data, GTimer &timer, Alarms &alarms);
 void fnAlarms(MyData &data, Alarms &alarms);
 void fnBuzzerProcess(MyData &data, Alarms &alarms);
-
+void fnLcdBrightnessControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer);
 
 
 //обработчик прерывания от Timer3 
@@ -169,17 +170,18 @@ void setup() {
   timerSensSupplyCheck.setMode(MANUAL);
   timerSensSupplyCheck.setInterval(SENS_SUPPLY_CHECK_START_DELAY);
   timerStartDelay.setMode(MANUAL);
-  
-
-  Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
-  Timer3.enableISR(CHANNEL_A);
+  timerBrightnessOff.setMode(MANUAL);
+  timerBrightnessOff.setTimeout(BRIGHTNESS_OFF_TIMEOUT);
 
   ps_voltage_filter.setCoef(0.1); // установка коэффициента фильтрации (0.0... 1.0). Чем меньше, тем плавнее фильтр
   ps_voltage_filter.setStep(20);  // установка шага фильтрации (мс). Чем меньше, тем резче фильтр
   sens_voltage_filter.setCoef(0.1);
-  sens_voltage_filter.setStep(50);
+  sens_voltage_filter.setStep(20);
   resistive_sensor_filter.setCoef(0.02);
   resistive_sensor_filter.setStep(1000);
+
+  Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
+  Timer3.enableISR(CHANNEL_A);
 
   if(!digitalRead(BUTTON_DOWN) && !digitalRead(BUTTON_UP)){
     fnOneWireScanner();
@@ -197,6 +199,7 @@ void setup() {
   ModbusRTUServer.configureHoldingRegisters(0x00, 10);
 
   timerStartDelay.setInterval(START_DELAY);
+ // digitalWrite(SENSORS_SUPPLY_5v, HIGH);
   
 }
 //**********************************************************************************************
@@ -205,7 +208,7 @@ void setup() {
 void loop() {
   
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
-  //digitalWrite(SENSORS_SUPPLY_5v, HIGH);
+  
   fnInputsUpdate();
   
   main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
@@ -343,16 +346,17 @@ void loop() {
 
   if(main_data.flag_system_started == true){
 
+    fnSensorsSupplyControl(main_data, timerSensSupplyCheck, present_alarms);
+    fnMainPowerControl(main_data, SetpointsUnion.setpoints_data, timerShutdownDelay);  
     fnTempSensorsUpdate();
     fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
     //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
     fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
     fnConverterControl(main_data, SetpointsUnion.setpoints_data);
     fnFridgeControl(main_data, SetpointsUnion.setpoints_data);
-    fnMainPowerControl(main_data, SetpointsUnion.setpoints_data, timerShutdownDelay); 
-    fnSensorsSupplyControl(main_data, timerSensSupplyCheck, present_alarms); 
     fnAlarms(main_data, present_alarms);
     fnBuzzerProcess(main_data, present_alarms);
+    fnLcdBrightnessControl(main_data, SetpointsUnion.setpoints_data,timerBrightnessOff);
   }
 
   //pjon
@@ -906,15 +910,15 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 15:
-    
+    sprintf(buffer,"%1u", present_alarms.temp_sensors);
     break;
 
   case 16:
-    
+    sprintf(buffer,"%1u", present_alarms.resist_water_sensor);
     break;
   
   case 17:
-    
+    sprintf(buffer,"%1u", present_alarms.sens_supply);
     break;
 
   case 18:
@@ -1908,6 +1912,18 @@ void fnBuzzerProcess(MyData &data, Alarms &alarms){
   }
 
 }
+//********************************************************************************
 
+//---- brightness -------------
+void fnLcdBrightnessControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer){
+
+  if(data.door_switch_state){
+    timer.setTimeout(BRIGHTNESS_OFF_TIMEOUT);
+    analogWrite(LCD_BLA_OUT, 255-(setpoints.lcd_brightness * 2.5));
+  }
+  else {
+    if(timer.isReady())analogWrite(LCD_BLA_OUT, 255);
+  }
+}
 //********************************************************************************
 
