@@ -1918,7 +1918,7 @@ void fnBuzzerProcess(MyData &data, Alarms &alarms){
 void fnLcdBrightnessControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer){
 
   if(data.door_switch_state){
-    timer.setTimeout(BRIGHTNESS_OFF_TIMEOUT);
+    timer.setTimeout(setpoints.scrreen_off_delay * SECOND);
     analogWrite(LCD_BLA_OUT, 255-(setpoints.lcd_brightness * 2.5));
   }
   else {
