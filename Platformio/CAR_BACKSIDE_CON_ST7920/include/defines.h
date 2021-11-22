@@ -69,16 +69,16 @@
 #define FRIDGE_SENSOR           3
 
 //inputs
-#define DOOR_SWITCH_INPUT_1                 54       //A0
-#define PROXIMITY_SENSOR_INPUT_2            55       //A1
-#define IGNITION_SWITCH_INPUT_3             56       //A2 
-#define LOW_WASHER_WATER_LEVEL_INPUT_4      57       //A3
-#define SUPPLY_VOLTAGE_INPUT                A4       //A4
-#define SENSORS_VOLTAGE_INPUT               A5       //A5
-#define RESISTIVE_SENSOR                    A6       //A6
+#define DOOR_SWITCH_INPUT_1                 54       // вход концевика задней двери
+#define PROXIMITY_SENSOR_INPUT_2            55       // вход датчика приблежения (можно использовать кнопку )
+#define IGNITION_SWITCH_INPUT_3             56       // вход зажигания 
+#define LOW_WASHER_WATER_LEVEL_INPUT_4      57       // вход от датчика в бачке оывателя(пока не используется)
+#define SUPPLY_VOLTAGE_INPUT                A4       // вход измерения напряжения питания
+#define SENSORS_VOLTAGE_INPUT               A5       // вход измерения напряжения питания сенсоров(5В)
+#define RESISTIVE_SENSOR                    A6       // вход резистивного датчика уровня
 #define WATER_FLOW_SENSOR                    5       //YF-S201 (пока не используется)
 #define BUTTON_ON_BOARD                     10       // кнопка на плате (пока не используется)
-#define POWER_OK_FROM_ADM705                41       //
+#define POWER_OK_FROM_ADM705                41       // сигнал от супервизора питания AD705 (пока не используется)
 #define BUTTON_UP                           36
 #define BUTTON_DOWN                         35
 #define BUTTON_ENTER_ESC                    37
@@ -88,29 +88,29 @@
 
 
 //outputs
-#define WATER_PUMP_OUTPUT_1      22  
-#define FRIDGE_OUTPUT_2          23  
-#define CONVERTER_OUTPUT_3       24  
-#define SENSORS_SUPPLY_5v         7  
-#define MAIN_SUPPLY_OUT			  9 
-#define BUZZER                    2  
-#define BUILTIN_LED              13
-#define WDT_RESET_OUT             8 
+#define WATER_PUMP_OUTPUT_1      22  // выход насоса для подачи воды
+#define FRIDGE_OUTPUT_2          23  // выход питания холодильника
+#define CONVERTER_OUTPUT_3       24  // выход управления конвертером 220/12в
+#define SENSORS_SUPPLY_5v         7  // выход управления питанием сенсоров 
+#define MAIN_SUPPLY_OUT			  9  // выход управления питанием самого себя))
+#define BUZZER                    2  // выход на пищалку
+#define BUILTIN_LED              13  // светодиод индикации на плате
+#define WDT_RESET_OUT             8  // выход сброса WDT на AD705
 
-#define LCD_BLA_OUT               44
+#define LCD_BLA_OUT               44 // выход подсветки дисплея
 #define LCD_CS                    53  
 #define LCD_RESET                 43
 
 //pjon swbb
-#define PJON_MY_ID                    2
-#define PJON_WATER_FLOAT_SENSOR_ID    3
-#define PJON_RESPONSE_TIMEOUT         5000
+#define PJON_MY_ID                    2     // собственный ID
+#define PJON_WATER_FLOAT_SENSOR_ID    3     // ID датчика уровеня воды
+#define PJON_RESPONSE_TIMEOUT         5000  // максимальное время ответа по протоколу PJON (датчик уровня воды)
 
 
 #define VERSION "ver 4.0"
 #define DIVISION_RATIO_VOLTAGE_INPUT      0.0208      // разрешение 0.0025 уможить на коэфициент деления предусилителя 4.85(или делителя)
 #define DIVISION_RATIO_SENS_SUPPLY_INPUT  0.0132     // разрешение 0.0025(для TL431) или 0.00256 (для внутреннего опорного 2.56в) уможить на коэфициент деления предусилителя 4.16
-#define DIVISION_RATIO_RESIST_SENSOR      0.279      //0.278       //
+#define DIVISION_RATIO_RESIST_SENSOR      0.279      //0.278     
 
 #define MS_100        100           //  100ms
 #define SECOND       1000           //ms  секунда
@@ -125,23 +125,23 @@
 //MENU
 #define MENU_SETPOINTS_NUM_ITEMS        35    // кол-во пунктов меню настроек
 #define MENU_PARAM_VIEW_NUM_ITEMS       20    // кол-во пунктов меню просмотра параметров
-#define MENU_MAIN_VIEW                  0
-#define MENU_PARAM_VIEW                 1
-#define MENU_SETPOINTS                  2
-#define MENU_SETPOINTS_EDIT_MODE        3
-#define MENU_LOGO_VIEW                  4
+
+#define MENU_MAIN_VIEW                  0       // главный экран 
+#define MENU_PARAM_VIEW                 1       // экран просмотра текущих параметров
+#define MENU_SETPOINTS                  2       // экран настроек
+#define MENU_SETPOINTS_EDIT_MODE        3       // экран настроек в режиме редактирования пункта 
+#define MENU_LOGO_VIEW                  4       // экра вывода логотипа
 
 
-#define LCD_LINE_SPACER                 4
-#define LCD_FONT_HIGHT                  8
-#define PARAM_LENGHT                    4
-#define ITEM_MAX_CHARS                  17
+#define LCD_LINE_SPACER                 4  // промежуток между строками
+#define LCD_FONT_HIGHT                  8   // высота шрифта    
+#define ITEM_MAX_CHARS                  17  // макс. количество символов в названии пункта
 
 //water sensor types
-#define PJON_SENSOR_TYPE               0
-#define RES_SENSOR_TYPE                1
-
+#define PJON_SENSOR_TYPE               0    // датчик с протоколом PJON (4 точки)
+#define RES_SENSOR_TYPE                1    // резистиваный датчик (190R)
+ 
 //water tank default capacity
-#define WATER_TANK_CAPACITY             35
+#define WATER_TANK_CAPACITY            35   //ёмкость бака с водой
 
 #endif

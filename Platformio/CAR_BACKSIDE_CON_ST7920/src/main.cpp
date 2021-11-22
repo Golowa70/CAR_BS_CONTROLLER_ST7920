@@ -128,7 +128,7 @@ void setup() {
     u8g2.drawStr(40,30,"READY!");
     u8g2.sendBuffer();
     tone(BUZZER,500,200);
-    delay(1000);
+    delay(500);
   } 
   else {
     u8g2.clearBuffer();
@@ -166,7 +166,7 @@ void setup() {
   timerFridgeShutdownDelay.setMode(MANUAL);
   timerFridgeShutdownDelay.setInterval(((uint32_t)SetpointsUnion.setpoints_data.fridge_T_IGN_off) * MINUTE);
   timerShutdownDelay.setMode(MANUAL);
-  timerShutdownDelay.setTimeout(SetpointsUnion.setpoints_data.shutdown_delay * MINUTE);
+  timerShutdownDelay.setTimeout(SetpointsUnion.setpoints_data.shutdown_delay * HOUR);
   timerSensSupplyCheck.setMode(MANUAL);
   timerSensSupplyCheck.setInterval(SENS_SUPPLY_CHECK_START_DELAY);
   timerStartDelay.setMode(MANUAL);
@@ -180,7 +180,7 @@ void setup() {
   resistive_sensor_filter.setCoef(0.02);
   resistive_sensor_filter.setStep(1000);
 
-  Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок
+  Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок 10ms
   Timer3.enableISR(CHANNEL_A);
 
   if(!digitalRead(BUTTON_DOWN) && !digitalRead(BUTTON_UP)){
@@ -188,6 +188,9 @@ void setup() {
   }
   
   menu_mode = MENU_MAIN_VIEW;
+
+  digitalWrite(SENSORS_SUPPLY_5v, HIGH);
+  fnTempSensorsUpdate();
 
   bus.begin();  
   bus.strategy.set_pin(PJON_BUS_PIN); // выбор пина дя передачи данных
@@ -199,7 +202,7 @@ void setup() {
   ModbusRTUServer.configureHoldingRegisters(0x00, 10);
 
   timerStartDelay.setInterval(START_DELAY);
- // digitalWrite(SENSORS_SUPPLY_5v, HIGH);
+ 
   
 }
 //**********************************************************************************************
@@ -233,14 +236,12 @@ void loop() {
 
         fnPrintMainView();
 
-        if(buttonUp.isClick()){
+        if(buttonUp.isHolded()){
           menu_mode = MENU_SETPOINTS;
           menu_current_item = 0;
+          tone(BUZZER,500,200);
         }
-        if(buttonDown.isClick()){
-          menu_mode = MENU_PARAM_VIEW;
-          menu_current_item = 0;
-        }
+
         if(buttonEnter.isClick()){
           menu_mode = MENU_LOGO_VIEW;
           menu_current_item = 0;
@@ -261,7 +262,7 @@ void loop() {
           Serial.println(menu_current_item);
         }
 
-        if(buttonEnter.isHold()){
+        if(buttonEnter.isClick()){
           menu_mode = MENU_MAIN_VIEW;
           menu_current_item = 0;
         }
@@ -283,9 +284,11 @@ void loop() {
         }
 
         if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS_EDIT_MODE;
+
         if(buttonEnter.isHold()){
           menu_mode = MENU_MAIN_VIEW;
           menu_current_item = 0;
+          tone(BUZZER,500,200);
         }
 
         break;
@@ -306,6 +309,7 @@ void loop() {
 
         if(buttonEnter.isClick()){
           EEPROM.updateBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data);
+          tone(BUZZER,500,200);
           Serial.println("eeprom updated!");
           menu_mode = MENU_SETPOINTS;
         }
@@ -318,16 +322,8 @@ void loop() {
         u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
         u8g2.sendBuffer();
 
-        if(buttonUp.isClick()){
-          menu_mode = MENU_SETPOINTS;
-          menu_current_item = 0;
-        }
-        if(buttonDown.isClick()){
-          menu_mode = MENU_PARAM_VIEW;
-          menu_current_item = 0;
-        }
         if(buttonEnter.isClick()){
-          menu_mode = MENU_MAIN_VIEW;
+          menu_mode = MENU_PARAM_VIEW;
           menu_current_item = 0;
         }
 
@@ -349,11 +345,11 @@ void loop() {
     fnSensorsSupplyControl(main_data, timerSensSupplyCheck, present_alarms);
     fnMainPowerControl(main_data, SetpointsUnion.setpoints_data, timerShutdownDelay);  
     fnTempSensorsUpdate();
-    fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
-    //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
     fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
     fnConverterControl(main_data, SetpointsUnion.setpoints_data);
     fnFridgeControl(main_data, SetpointsUnion.setpoints_data);
+    fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
+    //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
     fnAlarms(main_data, present_alarms);
     fnBuzzerProcess(main_data, present_alarms);
     fnLcdBrightnessControl(main_data, SetpointsUnion.setpoints_data,timerBrightnessOff);
@@ -432,16 +428,17 @@ void fnPrintMenuItemName(uint8_t _num_item, uint8_t _num_line, const char* const
   do {                                            // Начало цикла
     buffer[i] = (char)(pgm_read_byte(ptr++));     // Прочитать в буфер один символ из PGM и подвинуть указатель на 1
     i++;
-  } while (i<ITEM_MAX_CHARS);                  // Если это не конец строки - вернуться в начало цикла
+  } while (i<ITEM_MAX_CHARS);                     // Если это не конец строки - вернуться в начало цикла
   
 
   /*
-   while (pgm_read_byte(ptr) != NULL) {      // всю строку до нулевого символа
-      buffer[i++] = (char)(pgm_read_byte(ptr)); // выводим в монитор или куда нам надо
-      ptr++;                                   // следующий символ
+   while (pgm_read_byte(ptr) != NULL) {           // всю строку до нулевого символа
+      buffer[i++] = (char)(pgm_read_byte(ptr));   // выводим 
+      ptr++;                                      // следующий символ
     }                                 
  */
   //strcpy_P(buffer, pgm_read_word(&(_names[_num_item]))); 
+
   u8g2.setFont(u8g2_font_6x12_tr); 
   u8g2.drawStr(3,(_num_line*12)-2,buffer);          // Вывод готовой строки
   u8g2.setFont(u8g2_font_ncenB08_tr);	// 
@@ -1772,7 +1769,7 @@ void fnMainPowerControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer)
 
   if(data.ignition_switch_state)
   {
-    timer.setTimeout((uint32_t)setpoints.shutdown_delay * MINUTE);
+    timer.setTimeout((uint32_t)setpoints.shutdown_delay * HOUR);
     state = true;
   }
   else
