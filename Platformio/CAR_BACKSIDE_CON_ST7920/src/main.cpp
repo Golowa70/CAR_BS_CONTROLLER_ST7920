@@ -272,7 +272,13 @@ void loop() {
       ModbusRTUServer.coilWrite(0x04, main_data.converter_output_state);
       ModbusRTUServer.coilWrite(0x05, main_data.fridge_output_state);
       ModbusRTUServer.coilWrite(0x06, flag_pjon_water_sensor_connected);
-      ModbusRTUServer.coilWrite(0x07, 0);
+     
+      if(ModbusRTUServer.coilRead(0x07) == 1){  // проверка подключения по modbus
+        flag_mb_connected = true;
+        ModbusRTUServer.coilWrite(0x07, 0);
+      }
+      else flag_mb_connected = false;
+     
       ModbusRTUServer.coilWrite(0x08, main_data.sensors_supply_output_state);
       ModbusRTUServer.coilWrite(0x09, main_data.low_washer_water_level); //
 
@@ -766,6 +772,18 @@ void fnPrintMainView(void){
   else{
     u8g2.setDrawColor(0);
     u8g2.drawBox(1,1,16,8);
+    u8g2.setDrawColor(1);
+  }
+
+  if(flag_mb_connected){
+    u8g2.drawBox(19,1,16,8);
+    u8g2.setDrawColor(0);
+    u8g2.drawStr(20, 8, "MB");
+    u8g2.setDrawColor(1);
+  }
+  else{
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(19,1,16,8);
     u8g2.setDrawColor(1);
   }
 
