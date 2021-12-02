@@ -4,11 +4,9 @@
 //*********** Pjon variables ********************************************************
 uint16_t receive_from_ID;                //   идентификатор устройства от которого пришли данные
 uint16_t pjon_TX_water_sensor_response; //  результат передачи PJON
-uint16_t pjon_RX_response;               //  результат приёма PJON
-uint8_t pjon_sensor_fault_cnt;     // 
+uint16_t pjon_RX_response;               //  результат приёма PJON 
 
 bool flag_pjon_water_sensor_connected;
-bool flag_pjon_water_sensor_connected_old_state;
 
 //pjon receive from water level sensor 
 struct PjonReceive
@@ -60,10 +58,11 @@ struct SetpointsStruct { // структура для уставок
   uint8_t outside_sensor_id;
 
   uint8_t fridge_sensor_id;
+  uint8_t debug_key;
   uint8_t spare_1;
   uint8_t spare_2;
   uint8_t spare_3;
-  uint8_t spare_4;
+  
 
   uint8_t key;
   uint8_t crc8;  // пока не реализовано
@@ -121,11 +120,6 @@ struct MyData
 
 //********** MENU VARIABLES *********************************************************
 
-  // Битмап с картинкой стрелочки (Если нужен)
-  const uint8_t ptr_bmp[] PROGMEM = {
-    0x3C, 0x3C, 0x3C, 0x3C, 0x3C, 0xFF, 0xFF, 0x7E, 0x3C, 0x18,
-  };
-
   /* массивы строк с именами пунктов меню просмотра параметров */
   const char p0[] PROGMEM = "Battery V"; 
   const char p1[] PROGMEM = "Water level";
@@ -157,8 +151,7 @@ struct MyData
     p10,p11,p12,p13,p14,
     p15,p16,p17,p18,p19,
   };
-  
-  
+   
 
   /* массивы строк с именами пунктов меню настроек */
   const char i0[] PROGMEM = "Pump T off";  
@@ -192,7 +185,7 @@ struct MyData
   const char i28[] PROGMEM = "Inside sid";
   const char i29[] PROGMEM = "Outside sid";
   const char i30[] PROGMEM = "Fridge sid";
-  const char i31[] PROGMEM = "Parametr 32";
+  const char i31[] PROGMEM = "Debug print";
   const char i32[] PROGMEM = "Parametr 33";
   const char i33[] PROGMEM = "Parametr 34";
   const char i34[] PROGMEM = "Parametr 35";
@@ -230,7 +223,7 @@ struct MyData
    3,255,240,1,255,
    127,5,1,240,72,
    255,100,2,3,3,
-   3,255,255,255,255,
+   3,1,255,255,255,
   };
   
   uint8_t menu_current_item = 0; // Переменная указатель на текущий пункт меню
@@ -249,7 +242,7 @@ struct MyData
 //****** DISPLAY VARIABLES ********************************************************
 uint8_t display_height;
 uint8_t display_width;
-uint8_t display_num_lines;
+uint8_t display_num_lines; 
 
 //****** Errors ***************************************************************************
 
@@ -266,8 +259,8 @@ struct Alarms
 
 //********* OTHER VARIABLES *********************************************************
 
-
-
+  uint8_t main_process_step = 0;
+  
 //************ Icons ***********************************************************
 
 static unsigned char water_level_50x50[] = {
@@ -343,7 +336,6 @@ static unsigned char water_level_50x50[] = {
    0xf8, 0xff, 0xff, 0x07, 0xe0, 0xff, 0xff, 0x1f, 0xfc, 0xff, 0xff, 0x0f,
    0xe0, 0xff, 0xff, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
 
 
 #endif

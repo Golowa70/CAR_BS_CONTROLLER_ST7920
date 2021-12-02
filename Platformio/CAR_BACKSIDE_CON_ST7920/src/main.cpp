@@ -11,9 +11,9 @@
 #include "PJONSoftwareBitBang.h"
 #include <ArduinoRS485.h>
 #include <ArduinoModbus.h>
+#include <avr/wdt.h>
 
 PJONSoftwareBitBang bus;
-
 
 #include "defines.h"
 #include "variables.h"
@@ -28,15 +28,11 @@ PJONSoftwareBitBang bus;
 
 U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R2, /* CS=*/LCD_CS , /* reset=*/ LCD_RESET);
 
-uint32_t time;
-uint32_t old_time;
-
 //--------- one wire ---------------------------------------------------------------
 #define TEMPERATURE_PRECISION 9                                  // точность измерения температуры 9 бит
 OneWire oneWire(ONE_WIRE_PIN);                                   // порт шины 1WIRE
 DallasTemperature temp_sensors(&oneWire);                        // привязка библиотеки DallasTemperature к библиотеке OneWire
 DeviceAddress thermometerID_1, thermometerID_2, thermometerID_3; // резервируем адреса для трёх датчиков
-
 
 //-------- Butttons --------------------------
 GButton buttonUp(BUTTON_UP);
@@ -59,6 +55,7 @@ GTimer timerShutdownDelay(MS);
 GTimer timerSensSupplyCheck(MS);
 GTimer timerStartDelay(MS);   // таймер задержки опроса входов после старта
 GTimer timerBrightnessOff(MS);
+GTimer timerDebugPrint(MS);
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -93,6 +90,8 @@ void fnSensorsSupplyControl(MyData &data, GTimer &timer, Alarms &alarms);
 void fnAlarms(MyData &data, Alarms &alarms);
 void fnBuzzerProcess(MyData &data, Alarms &alarms);
 void fnLcdBrightnessControl(MyData &data, SetpointsStruct &setpoints, GTimer &timer);
+void fnMenuProcess(void);
+void fnDebugPrint(void);
 
 
 //обработчик прерывания от Timer3 
@@ -106,7 +105,7 @@ ISR(TIMER3_A)
 //**********************************************************************************
 
 void setup() {
-
+  
   Serial.begin(115200);
   u8g2.begin();
   u8g2.setFont(u8g2_font_ncenB08_tr);
@@ -172,6 +171,7 @@ void setup() {
   timerStartDelay.setMode(MANUAL);
   timerBrightnessOff.setMode(MANUAL);
   timerBrightnessOff.setTimeout(BRIGHTNESS_OFF_TIMEOUT);
+  timerDebugPrint.setInterval(500);
 
   ps_voltage_filter.setCoef(0.1); // установка коэффициента фильтрации (0.0... 1.0). Чем меньше, тем плавнее фильтр
   ps_voltage_filter.setStep(20);  // установка шага фильтрации (мс). Чем меньше, тем резче фильтр
@@ -203,191 +203,116 @@ void setup() {
 
   timerStartDelay.setInterval(START_DELAY);
  
+  wdt_enable(WDTO_500MS);
   
 }
 //**********************************************************************************************
 
 
 void loop() {
-  
+
+  wdt_reset();
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
-  
-  fnInputsUpdate();
-  
-  main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
+  fnInputsUpdate();  
   main_data.sensors_supply_voltage = (analogRead(SENSORS_VOLTAGE_INPUT) * DIVISION_RATIO_SENS_SUPPLY_INPUT);
-  main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR) -127 + SetpointsUnion.setpoints_data.resistive_sensor_correction) * DIVISION_RATIO_RESIST_SENSOR);
-  
-  
-  /*------------ Menu -----------------*/
-  if(timerMenuUpdate.isReady()){
-    //определение текущей страницы меню
-    if(menu_current_item < display_num_lines) menu_current_page = 0;  
-    else if(menu_current_item < display_num_lines*2)menu_current_page = 1 ;
-    else if(menu_current_item < display_num_lines*3)menu_current_page = 2 ;
-    else if(menu_current_item < display_num_lines*4)menu_current_page = 3 ;
-    else if(menu_current_item < display_num_lines*5)menu_current_page = 4 ;
-    else if(menu_current_item < display_num_lines*6)menu_current_page = 5 ;
-    else if(menu_current_item < display_num_lines*7)menu_current_page = 6 ;
-
-    switch (menu_mode)
-    {
-      case MENU_MAIN_VIEW:
-
-        fnPrintMainView();
-
-        if(buttonUp.isHolded()){
-          menu_mode = MENU_SETPOINTS;
-          menu_current_item = 0;
-          tone(BUZZER,500,200);
-        }
-
-        if(buttonEnter.isClick()){
-          menu_mode = MENU_LOGO_VIEW;
-          menu_current_item = 0;
-        }
-        break;
-
-      case MENU_PARAM_VIEW:
-
-        fnPrintMenuParamView();
-
-        if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
-          menu_current_item = constrain(menu_current_item - display_num_lines , 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
-          Serial.println(menu_current_item);
-        }
-
-        if (buttonDown.isClick() or buttonDown.isHold()) {   
-          menu_current_item = constrain(menu_current_item + display_num_lines, 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); 
-          Serial.println(menu_current_item);
-        }
-
-        if(buttonEnter.isClick()){
-          menu_mode = MENU_MAIN_VIEW;
-          menu_current_item = 0;
-        }
-
-        break;
-
-      case MENU_SETPOINTS:
-
-        printMenuSetpoints();
-
-        if (buttonDown.isClick() or buttonDown.isHold()) {         // Если кнопку нажали или удерживают
-          menu_current_item = constrain(menu_current_item + 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
-          Serial.println(menu_current_item);
-        }
-
-        if (buttonUp.isClick() or buttonUp.isHold()) {   
-          menu_current_item = constrain(menu_current_item - 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); 
-          Serial.println(menu_current_item);
-        }
-
-        if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS_EDIT_MODE;
-
-        if(buttonEnter.isHold()){
-          menu_mode = MENU_MAIN_VIEW;
-          menu_current_item = 0;
-          tone(BUZZER,500,200);
-        }
-
-        break;
-
-      case MENU_SETPOINTS_EDIT_MODE:
-
-        printMenuSetpoints();
-
-        if (buttonUp.isClick() or buttonUp.isHold()){
-          SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]+1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
-          Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
-        }
-
-        if (buttonDown.isClick() or buttonDown.isHold()){
-          SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]-1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
-          Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
-        }
-
-        if(buttonEnter.isClick()){
-          EEPROM.updateBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data);
-          tone(BUZZER,500,200);
-          Serial.println("eeprom updated!");
-          menu_mode = MENU_SETPOINTS;
-        }
-
-        break;
-      
-      case MENU_LOGO_VIEW:
-
-        u8g2.clearBuffer();
-        u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
-        u8g2.sendBuffer();
-
-        if(buttonEnter.isClick()){
-          menu_mode = MENU_PARAM_VIEW;
-          menu_current_item = 0;
-        }
-
-        break;
-
-      default:
-      
-      break;
-
+  if(timerStartDelay.isReady()){
+    main_data.flag_system_started = true;
+    if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+      Serial.println(F("timerStartDelay is Ready"));
     }
-
   }
-  //end menu
-
-  if(timerStartDelay.isReady())main_data.flag_system_started = true;
 
   if(main_data.flag_system_started == true){
 
-    fnSensorsSupplyControl(main_data, timerSensSupplyCheck, present_alarms);
-    fnMainPowerControl(main_data, SetpointsUnion.setpoints_data, timerShutdownDelay);  
-    fnTempSensorsUpdate();
-    fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
-    fnConverterControl(main_data, SetpointsUnion.setpoints_data);
-    fnFridgeControl(main_data, SetpointsUnion.setpoints_data);
-    fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
-    //fnPumpControl(main_data, SetpointsUnion.setpoints_data);
-    fnAlarms(main_data, present_alarms);
-    fnBuzzerProcess(main_data, present_alarms);
-    fnLcdBrightnessControl(main_data, SetpointsUnion.setpoints_data,timerBrightnessOff);
+    switch (main_process_step)
+    {
+    case 0:
+      fnMenuProcess();
+      main_process_step++;
+      break;
+
+    case 1:
+      main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR) -127 + SetpointsUnion.setpoints_data.resistive_sensor_correction) * DIVISION_RATIO_RESIST_SENSOR); 
+      main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
+      main_process_step++; 
+      break;
+
+    case 2:
+      fnSensorsSupplyControl(main_data, timerSensSupplyCheck, present_alarms);
+      fnMainPowerControl(main_data, SetpointsUnion.setpoints_data, timerShutdownDelay);
+      fnTempSensorsUpdate();
+      main_process_step++;
+      break;
+
+    case 3:
+      fnWaterLevelControl(main_data, pjon_sensor_receive_data, SetpointsUnion.setpoints_data, present_alarms);
+      main_process_step++;
+      break;
+
+    case 4:
+      fnConverterControl(main_data, SetpointsUnion.setpoints_data);
+      fnFridgeControl(main_data, SetpointsUnion.setpoints_data);
+      fnPumpControl_2(main_data, SetpointsUnion.setpoints_data);
+      main_process_step++;
+      break;
+
+    case 5:
+      fnAlarms(main_data, present_alarms);
+      fnBuzzerProcess(main_data, present_alarms);
+      fnLcdBrightnessControl(main_data, SetpointsUnion.setpoints_data,timerBrightnessOff);
+      main_process_step++;
+      break;
+
+    case 6:
+      // ********* ModBus registers update ******************************
+      ModbusRTUServer.coilWrite(0x00, main_data.ignition_switch_state);
+      ModbusRTUServer.coilWrite(0x01, main_data.door_switch_state);
+      ModbusRTUServer.coilWrite(0x02, main_data.proximity_sensor_state);
+      ModbusRTUServer.coilWrite(0x03, main_data.pump_output_state);
+      ModbusRTUServer.coilWrite(0x04, main_data.converter_output_state);
+      ModbusRTUServer.coilWrite(0x05, main_data.fridge_output_state);
+      ModbusRTUServer.coilWrite(0x06, flag_pjon_water_sensor_connected);
+      ModbusRTUServer.coilWrite(0x07, 0);
+      ModbusRTUServer.coilWrite(0x08, main_data.sensors_supply_output_state);
+      ModbusRTUServer.coilWrite(0x09, main_data.low_washer_water_level); //
+
+      ModbusRTUServer.holdingRegisterWrite(0x00, main_data.battery_voltage * 10);
+      ModbusRTUServer.holdingRegisterWrite(0x01, main_data.inside_temperature * 10);
+      ModbusRTUServer.holdingRegisterWrite(0x02, main_data.outside_temperature * 10);
+      ModbusRTUServer.holdingRegisterWrite(0x03, main_data.water_level_percent);
+      ModbusRTUServer.holdingRegisterWrite(0x04, main_data.water_level_liter);
+
+      ModbusRTUServer.holdingRegisterWrite(0x05, main_data.sensors_supply_voltage * 10);
+      ModbusRTUServer.holdingRegisterWrite(0x06, main_data.res_sensor_resistance);
+      ModbusRTUServer.holdingRegisterWrite(0x07, 0);
+      ModbusRTUServer.holdingRegisterWrite(0x08, 0);
+      ModbusRTUServer.holdingRegisterWrite(0x09, 0);
+      main_process_step++;
+      break;
+
+    case 7:
+      fnOutputsUpdate(main_data);
+      if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+        if(timerDebugPrint.isReady())fnDebugPrint();
+      }
+      main_process_step = 0;
+      break;  
+    
+    default:
+      main_process_step = 0;
+      break;
+    }
+
   }
 
   //pjon
   if(timerPjonSender.isReady())fnPjonSender();
   if(timerPjonResponse.isReady())flag_pjon_water_sensor_connected = false;
-  bus.receive(1000);  
+  bus.receive(500);  
   bus.update();
 
-  // ********* ModBus registers update ******************************
-  ModbusRTUServer.coilWrite(0x00, main_data.ignition_switch_state);
-  ModbusRTUServer.coilWrite(0x01, main_data.door_switch_state);
-  ModbusRTUServer.coilWrite(0x02, main_data.proximity_sensor_state);
-  ModbusRTUServer.coilWrite(0x03, main_data.pump_output_state);
-  ModbusRTUServer.coilWrite(0x04, main_data.converter_output_state);
-  ModbusRTUServer.coilWrite(0x05, main_data.fridge_output_state);
-  ModbusRTUServer.coilWrite(0x06, flag_pjon_water_sensor_connected);
-  ModbusRTUServer.coilWrite(0x07, 0);
-  ModbusRTUServer.coilWrite(0x08, main_data.sensors_supply_output_state);
-  ModbusRTUServer.coilWrite(0x09, main_data.low_washer_water_level); //
-
-  ModbusRTUServer.holdingRegisterWrite(0x00, main_data.battery_voltage * 10);
-  ModbusRTUServer.holdingRegisterWrite(0x01, main_data.inside_temperature * 10);
-  ModbusRTUServer.holdingRegisterWrite(0x02, main_data.outside_temperature * 10);
-  ModbusRTUServer.holdingRegisterWrite(0x03, main_data.water_level_percent);
-  ModbusRTUServer.holdingRegisterWrite(0x04, main_data.water_level_liter);
-
-  ModbusRTUServer.holdingRegisterWrite(0x05, main_data.sensors_supply_voltage * 10);
-  ModbusRTUServer.holdingRegisterWrite(0x06, main_data.res_sensor_resistance);
-  ModbusRTUServer.holdingRegisterWrite(0x07, 0);
-  ModbusRTUServer.holdingRegisterWrite(0x08, 0);
-  ModbusRTUServer.holdingRegisterWrite(0x09, 0);
-
+  delay(2);
   ModbusRTUServer.poll();
-
-  fnOutputsUpdate(main_data);
 
 }
 //****** end loop **************************************************************************************************
@@ -416,7 +341,7 @@ void fnPrintSelectionFrame(uint8_t item_pointer) {
 }
 
 
-// -----------Функция печати имени пункта меню из prm (общая для всех меню) --------------
+// -----------Функция печати имени пункта меню из progmem (общая для всех меню) --------------
 void fnPrintMenuItemName(uint8_t _num_item, uint8_t _num_line, const char* const* _names) {
   
   char buffer[32] = {0,};                            // Буфер на полную строку
@@ -612,7 +537,45 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 21:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+
+    switch (SetpointsUnion.SetpointsArray[num_item])
+    {
+    case MB_RATE_4800:
+      //sprintf(buffer, "4k8");
+      sprintf_P(buffer,PSTR("4k8"));
+      break;
+
+    case MB_RATE_7200:
+      //sprintf(buffer, "7K2");
+      sprintf_P(buffer,PSTR("7k2"));
+      break;
+
+    case MB_RATE_9600:
+      //sprintf(buffer, "9K6");
+      sprintf_P(buffer,PSTR("9k6"));
+      break;
+
+    case MB_RATE_19200:
+      //sprintf(buffer, "19K2");
+      sprintf_P(buffer,PSTR("19k2"));
+      break;
+
+    case MB_RATE_38400:
+      //sprintf(buffer, "38K4");
+      sprintf_P(buffer,PSTR("38k4"));
+      break;
+
+    case MB_RATE_57600:
+      //sprintf(buffer, "57K6");
+      sprintf_P(buffer,PSTR("57k6"));
+      break;
+    
+    default:
+      //sprintf(buffer, "?");
+      sprintf_P(buffer,PSTR("?"));
+      break;
+    }
+    
     break;
 
   case 22:
@@ -620,10 +583,10 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     switch (SetpointsUnion.SetpointsArray[num_item])
     {
     case 0:
-      sprintf(buffer,"OFF");
+      sprintf(buffer,"off");
       break;
     case 1:
-      sprintf(buffer,"ON");
+      sprintf(buffer,"on");
       break;
     
     default:
@@ -665,7 +628,20 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 31:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+
+    switch (SetpointsUnion.SetpointsArray[num_item])
+    {
+    case DEBUG_KEY_0:
+      sprintf(buffer, "off");
+      break;
+
+    case DEBUG_KEY_1:
+      sprintf(buffer, "on");
+      break;
+    
+    default:
+      break;
+    }
     break;
 
   case 32:
@@ -823,7 +799,7 @@ void fnPrintMenuParamView(void){
 }
 
 
-//-------  функция печати значения пункта меню параметров ------------------------------
+//----- функция печати значения пункта меню просмотра параметров ------------------------------
 void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 
   char buffer[10] = {0,};
@@ -871,7 +847,8 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 6:
-    sprintf(buffer,"%d",main_data.res_sensor_resistance);
+    if(main_data.res_sensor_resistance <= MAX_RESISTANCE)sprintf(buffer,"%d",main_data.res_sensor_resistance);
+    else sprintf(buffer,"xxx");
     break;
 
   case 7:
@@ -911,7 +888,21 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 16:
-    sprintf(buffer,"%1u", present_alarms.resist_water_sensor);
+    switch (SetpointsUnion.setpoints_data.water_sensor_type_selected)
+    {
+    case WATER_FLOAT_SENSOR_PJ:
+      sprintf(buffer,"%1u", present_alarms.pj_water_sensor);
+      break;
+
+    case WATER_RESISTIVE_SENSOR:
+      sprintf(buffer,"%1u", present_alarms.resist_water_sensor);
+      break;  
+    
+    default:
+      sprintf(buffer,"?");
+      break;
+    }
+    
     break;
   
   case 17:
@@ -937,7 +928,7 @@ void fnPrintMenuParamItemVal(uint8_t num_item, uint8_t num_line){
 
 void fnOneWireScanner(void){
 
-  Serial.println("fnOneWireScanner");
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(F("fnOneWireScanner"));
 
   uint8_t address[8] = {0,};
   uint8_t tmp_thermometerID_1[8] = {0,};
@@ -1015,9 +1006,10 @@ void fnOneWireScanner(void){
       else if(num_founded_sensors <= 3)current_state = founded_no_more_three;
       else if(num_founded_sensors > 3)current_state = founded_more_three;
 
-      Serial.print("Founded sensors ");
-      Serial.println(num_founded_sensors);
-
+      if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+        Serial.print(F("Founded sensors "));
+        Serial.println(num_founded_sensors);
+      }
       break;
 
     case founded_no_more_three:
@@ -1071,15 +1063,15 @@ void fnOneWireScanner(void){
       u8g2.drawStr(2, 30, "ID3: ");
 
       sprintf(buffer,"%x%x%x%x%x%x%x%x", tmp_thermometerID_1[0],tmp_thermometerID_1[1],tmp_thermometerID_1[2],tmp_thermometerID_1[3],tmp_thermometerID_1[4],tmp_thermometerID_1[5],tmp_thermometerID_1[6],tmp_thermometerID_1[7]);
-      Serial.println(buffer);
+      if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(buffer);
       u8g2.drawStr(30,10, buffer); //  
 
       sprintf(buffer,"%x%x%x%x%x%x%x%x",tmp_thermometerID_2[0],tmp_thermometerID_2[1],tmp_thermometerID_2[2],tmp_thermometerID_2[3],tmp_thermometerID_2[4],tmp_thermometerID_2[5],tmp_thermometerID_2[6],tmp_thermometerID_2[7]);
-      Serial.println(buffer);
+      if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(buffer);
       u8g2.drawStr(30,20, buffer);
 
       sprintf(buffer,"%x%x%x%x%x%x%x%x",tmp_thermometerID_3[0],tmp_thermometerID_3[1],tmp_thermometerID_3[2],tmp_thermometerID_3[3],tmp_thermometerID_3[4],tmp_thermometerID_3[5],tmp_thermometerID_3[6],tmp_thermometerID_3[7]);
-      Serial.println(buffer);
+      if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(buffer);
       u8g2.drawStr(30,30, buffer); 			
       
       u8g2.drawStr(7,40, "UP-> scan");
@@ -1143,13 +1135,19 @@ bool fnEEpromSetpointsCheck(void){
 
   EEPROM.readBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data); // считываем уставки из eeprom
   if (SetpointsUnion.setpoints_data.key == EEPROM_KEY) // если ключ совпадает значит не первый запуск
-  {      
-    Serial.println(EEPROM_KEY);            
+  {     
+    if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+      Serial.print(F("EEPROM KEY OK!  "));  
+      Serial.println(EEPROM_KEY); 
+    }           
     return true; // возвращаем один
   }
   else // если ключ  не совпадает значит первый запуск
   {
-    Serial.println(EEPROM_KEY); 
+    if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+      Serial.print(F("EEPROM KEY IS NOT VALID!  "));  
+      Serial.println(EEPROM_KEY); 
+    }          
     return false;
   }
 
@@ -1177,7 +1175,7 @@ bool fnEEpromWriteDefaultSetpoints(void){
 //----------
 bool fnEEpromInit(void){
 
-  Serial.println("fnEEpromInit");
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(F("fnEEpromInit"));
 
   char buffer [32] = {0,};
   enum fsm_state {check_saved_setpoints, no_saved_setpoints, write_default_setpoints,\
@@ -1192,62 +1190,72 @@ bool fnEEpromInit(void){
     switch (step){
 
       case check_saved_setpoints:
-        Serial.println("Check saved setpoints");
+        if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(F("Check saved setpoints"));
         if(fnEEpromSetpointsCheck())step = copy_setpoints_from_eepprom;
         else step = no_saved_setpoints;
         break;
 
       case no_saved_setpoints:
-        Serial.println("no saved setpoints");
+        if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(F("no saved setpoints"));
         step = write_default_setpoints;
         break;
 
       case write_default_setpoints:
-        Serial.println("write default ");
+        if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(F("write default "));
         if(fnEEpromWriteDefaultSetpoints())step = copy_setpoints_from_eepprom;
         else step = fault;
         break;
       
       case copy_setpoints_from_eepprom:
-        Serial.println("copy setpoints from eepprom");
+        if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(F("copy setpoints from eepprom"));
         EEPROM.readBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data);
         step = check_saved_sensors;
         break;
 
       case check_saved_sensors:
-        Serial.println("check saved sensors");
+        if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(F("check saved sensors"));
         step = copy_sensors_address_from_eepprom;
         break;
 
       case copy_sensors_address_from_eepprom:
-        Serial.println("copy sensors address from eepprom");
+        if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(F("Copy sensors address from eepprom..."));
         EEPROM.readBlock(EEPROM_1WIRE_ADDRESS, temp_sensors_data);
 
-        // копирование адресов датчиков из структуры уставок которая сохранена в EEPROM
+        // копирование адресов датчиков из структуры которая сохранена в EEPROM
         memcpy(&thermometerID_1, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.inside_sensor_id-1][0], sizeof(thermometerID_1));  //
         memcpy(&thermometerID_2, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.outside_sensor_id-1][0], sizeof(thermometerID_2)); //
         memcpy(&thermometerID_3, &temp_sensors_data.sensors_ID_array[SetpointsUnion.setpoints_data.fridge_sensor_id-1][0], sizeof(thermometerID_3));   //
         
         sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_1[0],thermometerID_1[1],thermometerID_1[2],thermometerID_1[3],thermometerID_1[4],thermometerID_1[5],thermometerID_1[6],thermometerID_1[7]);
-        Serial.println(buffer);
+        if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1){
+          Serial.print(F("thermometerID_1 "));Serial.println(buffer);
+        } 
         sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_2[0],thermometerID_2[1],thermometerID_2[2],thermometerID_2[3],thermometerID_2[4],thermometerID_2[5],thermometerID_2[6],thermometerID_2[7]);
-        Serial.println(buffer);
+        if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1){
+          Serial.print(F("thermometerID_2 "));Serial.println(buffer);
+        }
         sprintf(buffer,"%x%x%x%x%x%x%x%x",thermometerID_3[0],thermometerID_3[1],thermometerID_3[2],thermometerID_3[3],thermometerID_3[4],thermometerID_3[5],thermometerID_3[6],thermometerID_3[7]);
-        Serial.println(buffer);
+        if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1){
+          Serial.print(F("thermometerID_3 "));Serial.println(buffer);
+        } 
 
         step = successfully;
         break;
 
       case successfully:
-        Serial.println("successfully");
-        Serial.println("");
+        if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1){
+          Serial.println(F("successfully"));
+          Serial.println(F(""));
+        }
         flag_check_ok = true;
         step = exit;
         break;
 
       case fault:
-        Serial.println("fault");
-        Serial.println("");
+        if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1){
+          Serial.println(F("fault"));
+          Serial.println(F(""));
+        }
         flag_check_ok = false;
         step = exit;
         break;
@@ -1267,8 +1275,6 @@ bool fnEEpromInit(void){
 
 //--------
 void fnPumpControl(MyData &data, SetpointsStruct &setpoints){
-
-  Serial.println("fnPumpControl");
 
   static bool proximity_sensor_old_state; // предыдущее состояние датчика приближения
   static uint8_t pump_out_mode_old = setpoints.pump_out_mode;
@@ -1409,19 +1415,19 @@ void fnTempSensorsUpdate(void){
           case 1:
             main_data.inside_temperature = temp_sensors.getTempC(thermometerID_1);
             if (main_data.inside_temperature == DEVICE_DISCONNECTED_C)present_alarms.temp_sensors = true;
-            Serial.println(main_data.inside_temperature);
+            if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(main_data.inside_temperature);
             break;
 
           case 2:
             main_data.outside_temperature = temp_sensors.getTempC(thermometerID_2);
             if (main_data.outside_temperature == DEVICE_DISCONNECTED_C)present_alarms.temp_sensors = true;
-            Serial.println(main_data.outside_temperature);
+            if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(main_data.outside_temperature);
             break;
 
           case 3:
             main_data.fridge_temperature = temp_sensors.getTempC(thermometerID_3);
             if (main_data.fridge_temperature == DEVICE_DISCONNECTED_C)present_alarms.temp_sensors = true;
-            Serial.println(main_data.fridge_temperature);
+            if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(main_data.fridge_temperature);
             break;
 
           default:
@@ -1443,8 +1449,6 @@ void fnTempSensorsUpdate(void){
 
 //--------------
 void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
-
-  //Serial.println("fnPumpControl_2");
 
   bool prx_trigged = false;
   static bool prx_old_state = data.proximity_sensor_state;
@@ -1512,14 +1516,19 @@ void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
 void pj_receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info &packet_info){
 
   receive_from_ID = packet_info.tx.id; // от кого пришли данные
-  Serial.print("receive_from_ID");
-  Serial.println(receive_from_ID);
+  if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1){
+    Serial.print(F("PJ receive_from_ID "));
+    Serial.println(receive_from_ID);
+  }
   
   if (receive_from_ID == PJON_WATER_FLOAT_SENSOR_ID) {
     memcpy(&pjon_sensor_receive_data, payload, sizeof(pjon_sensor_receive_data)); //... копируем данные в соответствующую структуру
     flag_pjon_water_sensor_connected = true;
     timerPjonResponse.setTimeout(PJON_RESPONSE_TIMEOUT);
-    Serial.println(pjon_sensor_receive_data.value);
+    if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1){
+      Serial.print(F("PJ receive data "));Serial.println(pjon_sensor_receive_data.value);
+    }
+    
   }
 }
 //************************************************************************************************
@@ -1901,8 +1910,6 @@ void fnBuzzerProcess(MyData &data, Alarms &alarms){
     }
     common_alarm_old_state = alarms.common;
 
-
-
   }
   else {
     noTone(BUZZER);
@@ -1924,3 +1931,165 @@ void fnLcdBrightnessControl(MyData &data, SetpointsStruct &setpoints, GTimer &ti
 }
 //********************************************************************************
 
+void fnMenuProcess(void){
+  
+  /*------------ Menu -----------------*/
+  if(timerMenuUpdate.isReady()){
+    //определение текущей страницы меню
+    if(menu_current_item < display_num_lines) menu_current_page = 0;  
+    else if(menu_current_item < display_num_lines*2)menu_current_page = 1 ;
+    else if(menu_current_item < display_num_lines*3)menu_current_page = 2 ;
+    else if(menu_current_item < display_num_lines*4)menu_current_page = 3 ;
+    else if(menu_current_item < display_num_lines*5)menu_current_page = 4 ;
+    else if(menu_current_item < display_num_lines*6)menu_current_page = 5 ;
+    else if(menu_current_item < display_num_lines*7)menu_current_page = 6 ;
+
+    switch (menu_mode)
+    {
+      case MENU_MAIN_VIEW:
+
+        fnPrintMainView();
+
+        if(buttonUp.isHolded()){
+          menu_mode = MENU_SETPOINTS;
+          menu_current_item = 0;
+          tone(BUZZER,500,200);
+        }
+
+        if(buttonEnter.isClick()){
+          menu_mode = MENU_LOGO_VIEW;
+          menu_current_item = 0;
+        }
+        break;
+
+      case MENU_PARAM_VIEW:
+
+        fnPrintMenuParamView();
+
+        if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
+          menu_current_item = constrain(menu_current_item - display_num_lines , 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
+          if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(menu_current_item);
+        }
+
+        if (buttonDown.isClick() or buttonDown.isHold()) {   
+          menu_current_item = constrain(menu_current_item + display_num_lines, 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); 
+          if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(menu_current_item);
+        }
+
+        if(buttonEnter.isClick()){
+          menu_mode = MENU_MAIN_VIEW;
+          menu_current_item = 0;
+        }
+
+        break;
+
+      case MENU_SETPOINTS:
+
+        printMenuSetpoints();
+
+        if (buttonDown.isClick() or buttonDown.isHold()) {         // Если кнопку нажали или удерживают
+          menu_current_item = constrain(menu_current_item + 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
+          Serial.println(menu_current_item);
+        }
+
+        if (buttonUp.isClick() or buttonUp.isHold()) {   
+          menu_current_item = constrain(menu_current_item - 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); 
+          if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(menu_current_item);
+        }
+
+        if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS_EDIT_MODE;
+
+        if(buttonEnter.isHold()){
+          menu_mode = MENU_MAIN_VIEW;
+          menu_current_item = 0;
+          tone(BUZZER,500,200);
+        }
+
+        break;
+
+      case MENU_SETPOINTS_EDIT_MODE:
+
+        printMenuSetpoints();
+
+        if (buttonUp.isClick() or buttonUp.isHold()){
+          SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]+1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
+          Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
+        }
+
+        if (buttonDown.isClick() or buttonDown.isHold()){
+          SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]-1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
+          if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
+        }
+
+        if(buttonEnter.isClick()){
+          EEPROM.updateBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data);
+          tone(BUZZER,500,200);
+          if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(F("eeprom updated!"));
+          menu_mode = MENU_SETPOINTS;
+        }
+
+        break;
+      
+      case MENU_LOGO_VIEW:
+
+        u8g2.clearBuffer();
+        u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+        u8g2.sendBuffer();
+
+        if(buttonEnter.isClick()){
+          menu_mode = MENU_PARAM_VIEW;
+          menu_current_item = 0;
+        }
+
+        break;
+
+      default:
+      
+      break;
+
+    }
+  }
+  //end menu
+}
+
+//***********************************************************************************
+
+//---- Debug ------------
+
+void fnDebugPrint(void){
+
+  Serial.println(F("*************************** Inputs ********************************"));
+  Serial.println(F(""));
+  Serial.print(F("Door input state "));Serial.println(main_data.door_switch_state);
+  Serial.print(F("Ignition input state "));Serial.println(main_data.ignition_switch_state);
+  Serial.print(F("Proximity sensor input state "));Serial.println(main_data.proximity_sensor_state);
+  Serial.println(F(""));
+  Serial.println(F(""));
+  Serial.println(F("*************************** Outputs ********************************"));
+  Serial.println(F(""));
+  Serial.print(F("Pump output state "));Serial.println(main_data.pump_output_state);
+  Serial.print(F("Converter output state "));Serial.println(main_data.converter_output_state);
+  Serial.print(F("Fridge output state "));Serial.println(main_data.fridge_output_state);
+  Serial.println(F(""));
+  Serial.println(F(""));
+  Serial.println(F("*************************** Parameters ********************************"));
+  Serial.println(F(""));
+  Serial.print(F("Battery voltage "));Serial.println(main_data.battery_voltage);
+  Serial.print(F("Sensors supply voltage "));Serial.println(main_data.sensors_supply_voltage);
+  Serial.print(F("Inside temperature "));Serial.println(main_data.inside_temperature);
+  Serial.print(F("Outside temperature "));Serial.println(main_data.outside_temperature);
+  Serial.print(F("Fridge temperature "));Serial.println(main_data.fridge_temperature);
+  Serial.print(F("Resestive sensor resistance "));Serial.println(main_data.res_sensor_resistance);
+  Serial.print(F("Water level L "));Serial.println(main_data.water_level_liter);
+  Serial.println(F(""));
+  Serial.println(F(""));
+  Serial.println(F("*************************** Alarms ********************************"));
+  Serial.println(F(""));
+  Serial.print(F("Error PJ water sensor "));Serial.println(present_alarms.pj_water_sensor);
+  Serial.print(F("Error Resestive water sensor "));Serial.println(present_alarms.resist_water_sensor);
+  Serial.print(F("Error sensors supply "));Serial.println(present_alarms.sens_supply);
+  Serial.print(F("Error temp sensors "));Serial.println(present_alarms.temp_sensors);
+  Serial.println(F(""));
+  Serial.println(F(""));
+
+}

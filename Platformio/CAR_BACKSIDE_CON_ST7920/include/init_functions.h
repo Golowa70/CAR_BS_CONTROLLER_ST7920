@@ -87,10 +87,11 @@ void fnDefaultSetpointsInit(void){
     default_setpoints_data.outside_sensor_id = 2;
 
     default_setpoints_data.fridge_sensor_id = 3;
+    default_setpoints_data.debug_key = DEBUG_KEY_0;
     default_setpoints_data.spare_1 = 0;
     default_setpoints_data.spare_2 = 0;
     default_setpoints_data.spare_3 = 0;
-    default_setpoints_data.spare_4 = 0;
+
     default_setpoints_data.key = EEPROM_KEY;
 
   }

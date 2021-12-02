@@ -3,12 +3,8 @@
 
 #include <Arduino.h>
 
-#define DEBUG_GENERAL   1
-#define DEBUG_RTOS      0
-#define DEBUG_ERROR_LOG 0
-
-
-
+#define DEBUG_KEY_0             0
+#define DEBUG_KEY_1             1
 
 //timers
 #define TEMP_SENSORS_UPDATE_PERIOD   1000   //ms
@@ -17,7 +13,7 @@
 #define SENS_SUPPLY_CHECK_TIMES      5
 #define SENS_SUPPLY_CHECK_MIN_V      4
 #define SENS_SUPPLY_CHECK_START_DELAY 2000  //ms  
-#define BRIGHTNESS_OFF_TIMEOUT        5   //ms 
+#define BRIGHTNESS_OFF_TIMEOUT        5     //ms 
 
 
 //modes
@@ -31,14 +27,14 @@
 
 //resistive sensor nominal
 #define MIN_RESISTANCE          10
-#define MAX_RESISTANCE          255
+#define MAX_RESISTANCE          240
 
 //eeprom
 #define EEPROM_SETPOINTS_ADDRESS   0x00
 #define EEPROM_1WIRE_ADDRESS       0x40
-#define EEPROM_ERROR_LOG_ADDRES    0x80
+#define EEPROM_ERROR_LOG_ADDRES    0x80     // пока не используется
 
-#define EEPROM_KEY         0x12 //ключь для определения записаны ли уставки в память EEPROM или это первая запись
+#define EEPROM_KEY                  0x12    //ключь для определения записаны ли уставки в память EEPROM или это первая запись
 
 
 //communications
