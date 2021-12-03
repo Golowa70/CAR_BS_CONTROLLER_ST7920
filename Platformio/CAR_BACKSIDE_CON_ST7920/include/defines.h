@@ -13,7 +13,7 @@
 #define SENS_SUPPLY_CHECK_TIMES      5
 #define SENS_SUPPLY_CHECK_MIN_V      4
 #define SENS_SUPPLY_CHECK_START_DELAY 2000  //ms  
-#define BRIGHTNESS_OFF_TIMEOUT        5     //ms 
+#define MB_CHECK_CONN_TIME            5000  //ms       
 
 
 //modes

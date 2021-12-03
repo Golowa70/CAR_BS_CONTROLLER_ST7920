@@ -56,6 +56,7 @@ GTimer timerSensSupplyCheck(MS);
 GTimer timerStartDelay(MS);   // таймер задержки опроса входов после старта
 GTimer timerBrightnessOff(MS);
 GTimer timerDebugPrint(MS);
+GTimer timerMbCheckConn(MS);
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -170,8 +171,9 @@ void setup() {
   timerSensSupplyCheck.setInterval(SENS_SUPPLY_CHECK_START_DELAY);
   timerStartDelay.setMode(MANUAL);
   timerBrightnessOff.setMode(MANUAL);
-  timerBrightnessOff.setTimeout(BRIGHTNESS_OFF_TIMEOUT);
+  timerBrightnessOff.setTimeout(SetpointsUnion.setpoints_data.scrreen_off_delay * SECOND);
   timerDebugPrint.setInterval(500);
+  timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
 
   ps_voltage_filter.setCoef(0.1); // установка коэффициента фильтрации (0.0... 1.0). Чем меньше, тем плавнее фильтр
   ps_voltage_filter.setStep(20);  // установка шага фильтрации (мс). Чем меньше, тем резче фильтр
@@ -274,10 +276,14 @@ void loop() {
       ModbusRTUServer.coilWrite(0x06, flag_pjon_water_sensor_connected);
      
       if(ModbusRTUServer.coilRead(0x07) == 1){  // проверка подключения по modbus
+        timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
         flag_mb_connected = true;
-        ModbusRTUServer.coilWrite(0x07, 0);
+        ModbusRTUServer.coilWrite(0x07, 0);   
       }
-      else flag_mb_connected = false;
+      else {
+        if(timerMbCheckConn.isReady());
+        flag_mb_connected = false;
+      }
      
       ModbusRTUServer.coilWrite(0x08, main_data.sensors_supply_output_state);
       ModbusRTUServer.coilWrite(0x09, main_data.low_washer_water_level); //
