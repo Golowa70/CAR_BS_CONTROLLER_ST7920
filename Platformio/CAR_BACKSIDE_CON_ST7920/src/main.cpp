@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
-#include "GyverButton.h"
+#include "buttonMinim.h"
 #include "GyverTimer.h"
 #include <GyverFilters.h>
 #include <OneWire.h>
@@ -35,9 +35,9 @@ DallasTemperature temp_sensors(&oneWire);                        // привяз
 DeviceAddress thermometerID_1, thermometerID_2, thermometerID_3; // резервируем адреса для трёх датчиков
 
 //-------- Butttons --------------------------
-GButton buttonUp(BUTTON_UP);
-GButton buttonDown(BUTTON_DOWN);
-GButton buttonEnter(BUTTON_ENTER_ESC);
+buttonMinim buttonUp(BUTTON_UP);
+buttonMinim buttonDown(BUTTON_DOWN);
+buttonMinim buttonEnter(BUTTON_ENTER_ESC);
 
 //-------- Timers ----------------------------
 GTimer timerBlink(MS);
@@ -98,9 +98,9 @@ void fnDebugPrint(void);
 //обработчик прерывания от Timer3 
 ISR(TIMER3_A)
 {
-  buttonUp.tick();
-  buttonDown.tick();
-  buttonEnter.tick();
+ // buttonUp.tick();
+  //buttonDown.tick();
+ //buttonEnter.tick();
 
 }
 //**********************************************************************************
@@ -214,6 +214,7 @@ void setup() {
 void loop() {
 
   wdt_reset();
+  
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
   fnInputsUpdate();  
   main_data.sensors_supply_voltage = (analogRead(SENSORS_VOLTAGE_INPUT) * DIVISION_RATIO_SENS_SUPPLY_INPUT);
@@ -234,8 +235,8 @@ void loop() {
       break;
 
     case 1:
-      main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR) -127 + SetpointsUnion.setpoints_data.resistive_sensor_correction) * DIVISION_RATIO_RESIST_SENSOR); 
-      main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT) - 127 + SetpointsUnion.setpoints_data.voltage_correction) * DIVISION_RATIO_VOLTAGE_INPUT;
+      main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR)) * (DIVISION_RATIO_RESIST_SENSOR + ((float)SetpointsUnion.setpoints_data.resistive_sensor_correction/1000))); 
+      main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT)) * (DIVISION_RATIO_VOLTAGE_INPUT + ((float)SetpointsUnion.setpoints_data.voltage_correction/10000));
       main_process_step++; 
       break;
 
@@ -982,8 +983,8 @@ void fnOneWireScanner(void){
       u8g2.drawStr(7,50, "OK-> scan");
       u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();
-      if(buttonEnter.isClick())current_state = scanner;
-      if(buttonDown.isClick())current_state = exit;
+      if(buttonEnter.clicked())current_state = scanner;
+      if(buttonDown.clicked())current_state = exit;
       break;
     
     case scanner:
@@ -1047,9 +1048,9 @@ void fnOneWireScanner(void){
       u8g2.drawStr(7,50, "OK-> continue");
       u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();      
-      if(buttonDown.isClick())current_state = exit;
-      if(buttonEnter.isClick())current_state = save;
-      if(buttonUp.isClick())current_state = scanner;
+      if(buttonDown.clicked())current_state = exit;
+      if(buttonEnter.clicked())current_state = save;
+      if(buttonUp.clicked())current_state = scanner;
       break;
     
     case not_founded:
@@ -1061,8 +1062,8 @@ void fnOneWireScanner(void){
       u8g2.drawStr(7,50, "UP-> scan");
       u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();
-      if(buttonUp.isClick())current_state = scanner;
-      if(buttonDown.isClick())current_state = exit;
+      if(buttonUp.clicked())current_state = scanner;
+      if(buttonDown.clicked())current_state = exit;
       break;
 
     case founded_more_three:
@@ -1074,8 +1075,8 @@ void fnOneWireScanner(void){
       u8g2.drawStr(7,50, "UP-> scan");
       u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();
-      if(buttonUp.isClick())current_state = scanner;
-      if(buttonDown.isClick())current_state = exit;
+      if(buttonUp.clicked())current_state = scanner;
+      if(buttonDown.clicked())current_state = exit;
       break;
 
     case save:
@@ -1103,7 +1104,7 @@ void fnOneWireScanner(void){
       u8g2.drawStr(7,60, "DOWN-> exit");
       u8g2.sendBuffer();
 
-      if(buttonEnter.isClick()){
+      if(buttonEnter.clicked()){
 
         for(uint8_t i=0;i<8;i++){
 
@@ -1136,8 +1137,8 @@ void fnOneWireScanner(void){
         current_state = exit;
       }
 
-      if(buttonDown.isClick())current_state = exit;
-      if(buttonUp.isClick())current_state = scanner;
+      if(buttonDown.clicked())current_state = exit;
+      if(buttonUp.clicked())current_state = scanner;
       break;
 
     case exit:
@@ -1974,13 +1975,13 @@ void fnMenuProcess(void){
 
         fnPrintMainView();
 
-        if(buttonUp.isHolded()){
+        if(buttonUp.holded()){
           menu_mode = MENU_SETPOINTS;
           menu_current_item = 0;
           tone(BUZZER,500,200);
         }
 
-        if(buttonEnter.isClick()){
+        if(buttonEnter.clicked()){
           menu_mode = MENU_LOGO_VIEW;
           menu_current_item = 0;
         }
@@ -1990,17 +1991,17 @@ void fnMenuProcess(void){
 
         fnPrintMenuParamView();
 
-        if (buttonUp.isClick() or buttonUp.isHold()) {         // Если кнопку нажали или удерживают
+        if (buttonUp.clicked() or buttonUp.holding()) {         // Если кнопку нажали или удерживают
           menu_current_item = constrain(menu_current_item - display_num_lines , 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
           if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(menu_current_item);
         }
 
-        if (buttonDown.isClick() or buttonDown.isHold()) {   
+        if (buttonDown.clicked() or buttonDown.holding()) {   
           menu_current_item = constrain(menu_current_item + display_num_lines, 0, MENU_PARAM_VIEW_NUM_ITEMS - 1); 
           if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(menu_current_item);
         }
 
-        if(buttonEnter.isClick()){
+        if(buttonEnter.clicked()){
           menu_mode = MENU_MAIN_VIEW;
           menu_current_item = 0;
         }
@@ -2011,19 +2012,19 @@ void fnMenuProcess(void){
 
         printMenuSetpoints();
 
-        if (buttonDown.isClick() or buttonDown.isHold()) {         // Если кнопку нажали или удерживают
+        if (buttonDown.clicked() or buttonDown.holding()) {         // Если кнопку нажали или удерживают
           menu_current_item = constrain(menu_current_item + 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); // Двигаем указатель в пределах дисплея
           Serial.println(menu_current_item);
         }
 
-        if (buttonUp.isClick() or buttonUp.isHold()) {   
+        if (buttonUp.clicked() or buttonUp.holding()) {   
           menu_current_item = constrain(menu_current_item - 1, 0, MENU_SETPOINTS_NUM_ITEMS - 1); 
           if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(menu_current_item);
         }
 
-        if(buttonEnter.isClick())menu_mode = MENU_SETPOINTS_EDIT_MODE;
+        if(buttonEnter.clicked())menu_mode = MENU_SETPOINTS_EDIT_MODE;
 
-        if(buttonEnter.isHold()){
+        if(buttonEnter.holded()){
           menu_mode = MENU_MAIN_VIEW;
           menu_current_item = 0;
           tone(BUZZER,500,200);
@@ -2035,17 +2036,17 @@ void fnMenuProcess(void){
 
         printMenuSetpoints();
 
-        if (buttonUp.isClick() or buttonUp.isHold()){
+        if (buttonUp.clicked() or buttonUp.holding()){
           SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]+1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
           Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
         }
 
-        if (buttonDown.isClick() or buttonDown.isHold()){
+        if (buttonDown.clicked() or buttonDown.holding()){
           SetpointsUnion.SetpointsArray[menu_current_item] = constrain(SetpointsUnion.SetpointsArray[menu_current_item]-1,param_range_min[menu_current_item],param_range_max[menu_current_item]);
           if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(SetpointsUnion.SetpointsArray[menu_current_item]);
         }
 
-        if(buttonEnter.isClick()){
+        if(buttonEnter.clicked()){
           EEPROM.updateBlock(EEPROM_SETPOINTS_ADDRESS, SetpointsUnion.setpoints_data);
           tone(BUZZER,500,200);
           if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1)Serial.println(F("eeprom updated!"));
@@ -2060,7 +2061,7 @@ void fnMenuProcess(void){
         u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
         u8g2.sendBuffer();
 
-        if(buttonEnter.isClick()){
+        if(buttonEnter.clicked()){
           menu_mode = MENU_PARAM_VIEW;
           menu_current_item = 0;
         }
