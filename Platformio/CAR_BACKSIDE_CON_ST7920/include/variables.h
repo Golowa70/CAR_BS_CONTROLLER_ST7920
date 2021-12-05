@@ -41,7 +41,8 @@ struct SetpointsStruct { // структура для уставок
 
   uint8_t fridge_out_mode;  // Режим(авто, авто с термостатом, вкл, выкл).
   uint8_t resistive_sensor_correction; // 0- нолевая коррекция
-  uint8_t resistive_sensor_nominal;    // 
+  uint8_t resistive_sensor_max;    //
+  uint8_t resistive_sensor_min; 
   uint8_t water_sensor_type_selected;
   uint8_t water_tank_capacity;
 
@@ -61,7 +62,6 @@ struct SetpointsStruct { // структура для уставок
   uint8_t debug_key;
   uint8_t spare_1;
   uint8_t spare_2;
-  uint8_t spare_3;
   
 
   uint8_t key;
@@ -171,22 +171,22 @@ struct MyData
   const char i14[] PROGMEM = "Fridge temp off";
   const char i15[] PROGMEM = "Fridge out mode";
   const char i16[] PROGMEM = "Res sens corr";
-  const char i17[] PROGMEM = "Res sens nom";
-  const char i18[] PROGMEM = "Water sens type";
-  const char i19[] PROGMEM = "Water tank cap";
-  const char i20[] PROGMEM = "MB slave ID";
-  const char i21[] PROGMEM = "MB baud rate";
-  const char i22[] PROGMEM = "Buzzer out mode";
-  const char i23[] PROGMEM = "Screen off delay";
-  const char i24[] PROGMEM = "Shutdown delay";
-  const char i25[] PROGMEM = "U correction";
-  const char i26[] PROGMEM = "Brightness";
-  const char i27[] PROGMEM = "Logo";
-  const char i28[] PROGMEM = "Inside sid";
-  const char i29[] PROGMEM = "Outside sid";
-  const char i30[] PROGMEM = "Fridge sid";
-  const char i31[] PROGMEM = "Debug print";
-  const char i32[] PROGMEM = "Parametr 33";
+  const char i17[] PROGMEM = "Res sens max";
+  const char i18[] PROGMEM = "Res sens min";
+  const char i19[] PROGMEM = "Water sens type";
+  const char i20[] PROGMEM = "Water tank cap";
+  const char i21[] PROGMEM = "MB slave ID";
+  const char i22[] PROGMEM = "MB baud rate";
+  const char i23[] PROGMEM = "Buzzer out mode";
+  const char i24[] PROGMEM = "Screen off delay";
+  const char i25[] PROGMEM = "Shutdown delay";
+  const char i26[] PROGMEM = "U correction";
+  const char i27[] PROGMEM = "Brightness";
+  const char i28[] PROGMEM = "Logo";
+  const char i29[] PROGMEM = "Inside sid";
+  const char i30[] PROGMEM = "Outside sid";
+  const char i31[] PROGMEM = "Fridge sid";
+  const char i32[] PROGMEM = "Debug print";
   const char i33[] PROGMEM = "Parametr 34";
   const char i34[] PROGMEM = "Parametr 35";
   
@@ -209,9 +209,9 @@ struct MyData
     1,0,0,90,1,
     100,1,0,5,0,
     0,0,10,0,0,
-    0,0,0,3,1,
-    0,30,0,1,1,
-    1,0,0,0,0,
+    0,1,0,0,0,
+    1,0,30,0,1,
+    1,1,0,0,0,
   };
 
   //Массив максимальных значений параметров
@@ -220,10 +220,10 @@ struct MyData
    20,2,130,240,180,
    240,240,3,130,240,
    180,240,240,24,20,
-   3,255,240,1,255,
-   127,5,1,240,72,
-   255,100,2,3,3,
-   3,1,255,255,255,
+   3,255,240,230,1,
+   255,127,5,1,240,
+   72,255,100,2,3,
+   3,3,1,255,255,
   };
   
   uint8_t menu_current_item = 0; // Переменная указатель на текущий пункт меню

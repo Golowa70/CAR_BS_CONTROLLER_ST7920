@@ -70,18 +70,19 @@ void fnDefaultSetpointsInit(void){
 
     default_setpoints_data.fridge_out_mode = AUTO_MODE;  // Режим(авто, авто с термостатом, вкл, выкл).
     default_setpoints_data.resistive_sensor_correction = 127; // 127 - коррекция по умолчанию
-    default_setpoints_data.resistive_sensor_nominal = 190;    // 
+    default_setpoints_data.resistive_sensor_max = 190;    // 
+    default_setpoints_data.resistive_sensor_min = 0;
     default_setpoints_data.water_sensor_type_selected = PJON_SENSOR_TYPE;
     default_setpoints_data.water_tank_capacity = WATER_TANK_CAPACITY;
 
     default_setpoints_data.mb_slave_ID = 2;
     default_setpoints_data.mb_baud_rate = MB_RATE_9600;
-    default_setpoints_data.buzzer_out_mode = ON_MODE;
-    default_setpoints_data.scrreen_off_delay = 10;  //
+    default_setpoints_data.buzzer_out_mode = 0; // off
+    default_setpoints_data.scrreen_off_delay = 5;  //
     default_setpoints_data.shutdown_delay = 2;
 
     default_setpoints_data.voltage_correction = 104; // 104 - коррекция по умолчанию
-    default_setpoints_data.lcd_brightness = 100;
+    default_setpoints_data.lcd_brightness = 70;
     default_setpoints_data.logo_selection = 0;
     default_setpoints_data.inside_sensor_id = 1;
     default_setpoints_data.outside_sensor_id = 2;
@@ -90,7 +91,6 @@ void fnDefaultSetpointsInit(void){
     default_setpoints_data.debug_key = DEBUG_KEY_0;
     default_setpoints_data.spare_1 = 0;
     default_setpoints_data.spare_2 = 0;
-    default_setpoints_data.spare_3 = 0;
 
     default_setpoints_data.key = EEPROM_KEY;
 

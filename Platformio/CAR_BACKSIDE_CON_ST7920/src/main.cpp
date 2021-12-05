@@ -524,6 +524,10 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 18:
+    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    break;
+
+  case 19:
     
     switch (SetpointsUnion.SetpointsArray[num_item])
     {
@@ -541,15 +545,15 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
 
     break;
   
-  case 19:
+  case 20:
     sprintf(buffer, "%dL", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
-  case 20:
+  case 21:
     sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
-  case 21:
+  case 22:
 
     switch (SetpointsUnion.SetpointsArray[num_item])
     {
@@ -591,7 +595,7 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     
     break;
 
-  case 22:
+  case 23:
 
     switch (SetpointsUnion.SetpointsArray[num_item])
     {
@@ -608,20 +612,16 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     
     break;
 
-  case 23:
+  case 24:
     sprintf(buffer, "%ds", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
-  case 24:
+  case 25:
     sprintf(buffer, "%dh", SetpointsUnion.SetpointsArray[num_item]);
     break;
 
-  case 25:
-    sprintf(buffer,"%d",SetpointsUnion.SetpointsArray[num_item]);
-    break;
-
   case 26:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    sprintf(buffer,"%d",SetpointsUnion.SetpointsArray[num_item]);
     break;
 
   case 27:
@@ -641,6 +641,10 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     break;
 
   case 31:
+    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
+    break;
+
+  case 32:
 
     switch (SetpointsUnion.SetpointsArray[num_item])
     {
@@ -657,10 +661,6 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     }
     break;
 
-  case 32:
-    sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
-    break;
-
   case 33:
     sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
     break;
@@ -668,8 +668,6 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
   case 34:
     sprintf(buffer, "%d", SetpointsUnion.SetpointsArray[num_item]);
     break;
-
-  
 
   default:
     break;
@@ -1227,6 +1225,10 @@ bool fnEEpromInit(void){
 
       case write_default_setpoints:
         if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(F("write default "));
+        u8g2.clearBuffer();
+        u8g2.drawStr(20,30,"WRITE DEFAULT...");
+        u8g2.sendBuffer();
+        delay(2000);
         if(fnEEpromWriteDefaultSetpoints())step = copy_setpoints_from_eepprom;
         else step = fault;
         break;
@@ -1630,8 +1632,9 @@ void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, Setp
 
         alarms.pj_water_sensor = false;
 
-        data.water_level_liter = (uint8_t)(data.res_sensor_resistance * (water_tank_capacity_temp_value / setpoints.resistive_sensor_nominal));
-        if (data.res_sensor_resistance > ((uint16_t)setpoints.resistive_sensor_nominal + 10))
+        data.water_level_liter =  map((long)data.res_sensor_resistance, (long)setpoints.resistive_sensor_min,(long)setpoints.resistive_sensor_max,0,(long)setpoints.water_tank_capacity);
+        
+        if (data.res_sensor_resistance > ((uint16_t)setpoints.resistive_sensor_max + 10))
         {
           data.water_level_liter = 0;  //
           alarms.resist_water_sensor = true; //
@@ -1937,7 +1940,7 @@ void fnBuzzerProcess(MyData &data, Alarms &alarms){
 
   }
   else {
-    noTone(BUZZER);
+    //noTone(BUZZER);
   }
 
 }

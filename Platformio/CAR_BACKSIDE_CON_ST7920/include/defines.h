@@ -34,7 +34,7 @@
 #define EEPROM_1WIRE_ADDRESS       0x40
 #define EEPROM_ERROR_LOG_ADDRES    0x80     // пока не используется
 
-#define EEPROM_KEY                  0x12    //ключь для определения записаны ли уставки в память EEPROM или это первая запись
+#define EEPROM_KEY                  0x11    //ключь для определения записаны ли уставки в память EEPROM или это первая запись
 
 
 //communications
