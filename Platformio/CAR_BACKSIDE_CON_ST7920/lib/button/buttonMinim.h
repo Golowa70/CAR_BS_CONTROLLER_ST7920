@@ -57,13 +57,13 @@ private:
 			flags.pressF = true;
 			flags.holdedFlag = true;
 		}
-		if (btnState && flags.btnFlag && ((uint32_t)millis() - _btnTimer < 350)) {
+		if (btnState && flags.btnFlag && ((uint32_t)millis() - _btnTimer < 500)) { //350
 			flags.btnFlag = false;
 			_btnTimer = millis();
 			flags.clickF = true;
 			flags.holdF = false;
 		}
-		if (flags.btnFlag && ((uint32_t)millis() - _btnTimer > 600)) {
+		if (flags.btnFlag && ((uint32_t)millis() - _btnTimer > 800)) {  //600
 			if (!btnState) {
 				flags.holdF = true;
 			} else {

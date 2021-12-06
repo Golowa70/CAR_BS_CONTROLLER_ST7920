@@ -95,14 +95,6 @@ void fnMenuProcess(void);
 void fnDebugPrint(void);
 
 
-//обработчик прерывания от Timer3 
-ISR(TIMER3_A)
-{
- // buttonUp.tick();
-  //buttonDown.tick();
- //buttonEnter.tick();
-
-}
 //**********************************************************************************
 
 void setup() {
@@ -173,7 +165,10 @@ void setup() {
   timerBrightnessOff.setMode(MANUAL);
   timerBrightnessOff.setTimeout(SetpointsUnion.setpoints_data.scrreen_off_delay * SECOND);
   timerDebugPrint.setInterval(500);
+  timerMbCheckConn.setMode(MANUAL);
   timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
+
+  digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
 
   ps_voltage_filter.setCoef(0.1); // установка коэффициента фильтрации (0.0... 1.0). Чем меньше, тем плавнее фильтр
   ps_voltage_filter.setStep(20);  // установка шага фильтрации (мс). Чем меньше, тем резче фильтр
@@ -182,8 +177,6 @@ void setup() {
   resistive_sensor_filter.setCoef(0.02);
   resistive_sensor_filter.setStep(1000);
 
-  Timer3.setPeriod(10000); // Устанавливаем период таймера опроса кнопок 10ms
-  Timer3.enableISR(CHANNEL_A);
 
   if(!digitalRead(BUTTON_DOWN) && !digitalRead(BUTTON_UP)){
     fnOneWireScanner();
@@ -213,6 +206,12 @@ void setup() {
 
 void loop() {
 
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print("Loop  ");
+    Serial.println(millis());
+    Serial.print(" ms");
+  }
+  
   wdt_reset();
   
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
@@ -274,18 +273,7 @@ void loop() {
       ModbusRTUServer.coilWrite(0x03, main_data.pump_output_state);
       ModbusRTUServer.coilWrite(0x04, main_data.converter_output_state);
       ModbusRTUServer.coilWrite(0x05, main_data.fridge_output_state);
-      ModbusRTUServer.coilWrite(0x06, flag_pjon_water_sensor_connected);
-     
-      if(ModbusRTUServer.coilRead(0x07) == 1){  // проверка подключения по modbus
-        timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
-        flag_mb_connected = true;
-        ModbusRTUServer.coilWrite(0x07, 0);   
-      }
-      else {
-        if(timerMbCheckConn.isReady());
-        flag_mb_connected = false;
-      }
-     
+      ModbusRTUServer.coilWrite(0x06, flag_pjon_water_sensor_connected);     
       ModbusRTUServer.coilWrite(0x08, main_data.sensors_supply_output_state);
       ModbusRTUServer.coilWrite(0x09, main_data.low_washer_water_level); //
 
@@ -300,6 +288,17 @@ void loop() {
       ModbusRTUServer.holdingRegisterWrite(0x07, 0);
       ModbusRTUServer.holdingRegisterWrite(0x08, 0);
       ModbusRTUServer.holdingRegisterWrite(0x09, 0);
+
+      // проверка подключения по modbus. Мастер должен записывать еденицу в coil 0x07 не реже 1 раз в пять сек
+      if(ModbusRTUServer.coilRead(0x07) == 1){  
+        timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
+        flag_mb_connected = true;
+        ModbusRTUServer.coilWrite(0x07, 0);   
+      }  
+      if(timerMbCheckConn.isReady()){
+        flag_mb_connected = false;
+      }
+
       main_process_step++;
       break;
 
@@ -321,7 +320,7 @@ void loop() {
   //pjon
   if(timerPjonSender.isReady())fnPjonSender();
   if(timerPjonResponse.isReady())flag_pjon_water_sensor_connected = false;
-  bus.receive(500);  
+  bus.receive(250);  
   bus.update();
 
   delay(2);
@@ -330,7 +329,7 @@ void loop() {
 }
 //****** end loop **************************************************************************************************
 
-// 
+//----------- Функция печати рамки навигации по меню ------------------- 
 void fnPrintSelectionFrame(uint8_t item_pointer) {
 
   uint8_t n = 0;
@@ -354,7 +353,7 @@ void fnPrintSelectionFrame(uint8_t item_pointer) {
 }
 
 
-// -----------Функция печати имени пункта меню из progmem (общая для всех меню) --------------
+//-----------Функция печати имени пункта меню из progmem (общая для всех меню) --------------
 void fnPrintMenuItemName(uint8_t _num_item, uint8_t _num_line, const char* const* _names) {
   
   char buffer[32] = {0,};                            // Буфер на полную строку
@@ -781,7 +780,7 @@ void fnPrintMainView(void){
   }
 
   if(flag_mb_connected){
-    u8g2.drawBox(19,1,16,8);
+    u8g2.drawBox(19,1,11,8);
     u8g2.setDrawColor(0);
     u8g2.drawStr(20, 8, "MB");
     u8g2.setDrawColor(1);
@@ -801,6 +800,7 @@ void fnPrintMainView(void){
 
   u8g2.sendBuffer();
 }
+
 
 //-------- Функция вывода меню параметров  ---------------------------------------------
 void fnPrintMenuParamView(void){
