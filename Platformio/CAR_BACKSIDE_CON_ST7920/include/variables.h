@@ -261,6 +261,8 @@ struct Alarms
 
   uint8_t main_process_step = 0;
   bool flag_mb_connected = 0;
+  unsigned long old_time = 0;
+  unsigned long loop_old_time = 0;
   
 //************ Icons ***********************************************************
 

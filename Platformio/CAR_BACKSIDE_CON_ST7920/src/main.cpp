@@ -57,6 +57,7 @@ GTimer timerStartDelay(MS);   // таймер задержки опроса вх
 GTimer timerBrightnessOff(MS);
 GTimer timerDebugPrint(MS);
 GTimer timerMbCheckConn(MS);
+GTimer timerMBdelay(MS);
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -99,6 +100,7 @@ void fnDebugPrint(void);
 
 void setup() {
   
+  old_time = millis();
   Serial.begin(115200);
   u8g2.begin();
   u8g2.setFont(u8g2_font_ncenB08_tr);
@@ -167,6 +169,7 @@ void setup() {
   timerDebugPrint.setInterval(500);
   timerMbCheckConn.setMode(MANUAL);
   timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
+  timerMBdelay.setInterval(500);
 
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
 
@@ -199,25 +202,29 @@ void setup() {
   timerStartDelay.setInterval(START_DELAY);
  
   wdt_enable(WDTO_500MS);
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print("Setup time  ");
+    Serial.print(millis()-old_time);
+    Serial.println(" ms");
+  }
   
 }
 //**********************************************************************************************
 
 
 void loop() {
-
-  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
-    Serial.print("Loop  ");
-    Serial.println(millis());
-    Serial.print(" ms");
-  }
   
+  loop_old_time = millis();
   wdt_reset();
   
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
-  fnInputsUpdate();  
+    
   main_data.sensors_supply_voltage = (analogRead(SENSORS_VOLTAGE_INPUT) * DIVISION_RATIO_SENS_SUPPLY_INPUT);
+  main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR)) * (DIVISION_RATIO_RESIST_SENSOR + ((float)SetpointsUnion.setpoints_data.resistive_sensor_correction/1000))); 
+
   if(timerStartDelay.isReady()){
+    timerStartDelay.stop();
     main_data.flag_system_started = true;
     if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
       Serial.println(F("timerStartDelay is Ready"));
@@ -225,6 +232,8 @@ void loop() {
   }
 
   if(main_data.flag_system_started == true){
+
+    fnInputsUpdate();
 
     switch (main_process_step)
     {
@@ -234,7 +243,6 @@ void loop() {
       break;
 
     case 1:
-      main_data.res_sensor_resistance = (uint16_t) (resistive_sensor_filter.filtered(analogRead(RESISTIVE_SENSOR)) * (DIVISION_RATIO_RESIST_SENSOR + ((float)SetpointsUnion.setpoints_data.resistive_sensor_correction/1000))); 
       main_data.battery_voltage = (analogRead(SUPPLY_VOLTAGE_INPUT)) * (DIVISION_RATIO_VOLTAGE_INPUT + ((float)SetpointsUnion.setpoints_data.voltage_correction/10000));
       main_process_step++; 
       break;
@@ -320,11 +328,30 @@ void loop() {
   //pjon
   if(timerPjonSender.isReady())fnPjonSender();
   if(timerPjonResponse.isReady())flag_pjon_water_sensor_connected = false;
-  bus.receive(250);  
+  bus.receive(1000);  
   bus.update();
 
-  delay(2);
-  ModbusRTUServer.poll();
+  //delay(1);
+  if(timerMBdelay.isReady()){
+    old_time = millis();
+    ModbusRTUServer.poll();
+    if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+      Serial.print(F("ModBusPool time  "));
+      Serial.print(millis()-old_time);
+      Serial.println(F(" ms"));
+    }
+  }
+  
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.println(F(""));
+    Serial.print(F("**************************** Timing "));
+    Serial.print(millis());
+    Serial.println(F(" ms ****************************"));
+    Serial.print(F("Loop  "));
+    Serial.print(millis()-loop_old_time);
+    Serial.println(F(" ms"));
+  }
 
 }
 //****** end loop **************************************************************************************************
@@ -557,37 +584,30 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     switch (SetpointsUnion.SetpointsArray[num_item])
     {
     case MB_RATE_4800:
-      //sprintf(buffer, "4k8");
       sprintf_P(buffer,PSTR("4k8"));
       break;
 
     case MB_RATE_7200:
-      //sprintf(buffer, "7K2");
       sprintf_P(buffer,PSTR("7k2"));
       break;
 
     case MB_RATE_9600:
-      //sprintf(buffer, "9K6");
       sprintf_P(buffer,PSTR("9k6"));
       break;
 
     case MB_RATE_19200:
-      //sprintf(buffer, "19K2");
       sprintf_P(buffer,PSTR("19k2"));
       break;
 
     case MB_RATE_38400:
-      //sprintf(buffer, "38K4");
       sprintf_P(buffer,PSTR("38k4"));
       break;
 
     case MB_RATE_57600:
-      //sprintf(buffer, "57K6");
       sprintf_P(buffer,PSTR("57k6"));
       break;
     
     default:
-      //sprintf(buffer, "?");
       sprintf_P(buffer,PSTR("?"));
       break;
     }
@@ -599,7 +619,7 @@ void fnPrintMenuSetpointsItemVal(uint8_t num_item, uint8_t num_line){
     switch (SetpointsUnion.SetpointsArray[num_item])
     {
     case 0:
-      sprintf(buffer,"off");
+      sprintf_P(buffer,PSTR("off"));
       break;
     case 1:
       sprintf(buffer,"on");
@@ -1198,6 +1218,7 @@ bool fnEEpromWriteDefaultSetpoints(void){
 //----------
 bool fnEEpromInit(void){
 
+  old_time = millis();
   if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1)Serial.println(F("fnEEpromInit"));
 
   char buffer [32] = {0,};
@@ -1296,6 +1317,12 @@ bool fnEEpromInit(void){
     }
   }
 
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("EepromInit time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
+
   return flag_check_ok;  
 }
 //***********************************************************************************
@@ -1364,6 +1391,7 @@ void fnPumpControl(MyData &data, SetpointsStruct &setpoints){
 //---------------
 void fnInputsUpdate(void){
 
+  old_time = millis();
   static uint8_t inputs_undebounced_sample = 0;
   static uint8_t inputs_debounced_state = 0;
 
@@ -1385,6 +1413,12 @@ void fnInputsUpdate(void){
   main_data.proximity_sensor_state = (inputs_debounced_state & (1 << 1));
   main_data.ignition_switch_state = (inputs_debounced_state & (1 << 2));
   main_data.low_washer_water_level = (inputs_debounced_state & (1 << 3));
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("InputsUpdate time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
 
 }
 //**********************************************************************************8
@@ -1411,17 +1445,25 @@ uint8_t fnDebounce(uint8_t sample) // антидребезг на основе �
 //Outputs Update
 void fnOutputsUpdate(MyData &data)
 {     
+  old_time = millis();
   digitalWrite(WATER_PUMP_OUTPUT_1, data.pump_output_state); //
   digitalWrite(FRIDGE_OUTPUT_2, data.fridge_output_state);     //
   digitalWrite(CONVERTER_OUTPUT_3, data.converter_output_state);
   digitalWrite(SENSORS_SUPPLY_5v, data.sensors_supply_output_state);
-  digitalWrite(MAIN_SUPPLY_OUT, data.main_supply_output_state);  
+  digitalWrite(MAIN_SUPPLY_OUT, data.main_supply_output_state); 
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("OutputsUpdate time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  } 
 }
 //*******************************************************************************
 
 //-----------
 void fnTempSensorsUpdate(void){
 
+  old_time = millis();
   static uint8_t temp_cnt = 1;
   static bool flag_ds18b20_update = false;
 
@@ -1471,12 +1513,19 @@ void fnTempSensorsUpdate(void){
       }
     }
   }
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("TempSensorsUpdate time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
 }
 //******************************************************************************
 
 //--------------
 void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
 
+  old_time = millis();
   bool prx_trigged = false;
   static bool prx_old_state = data.proximity_sensor_state;
   enum fsm_state {off, wait_for_prx,wait_for_T_off};
@@ -1536,12 +1585,19 @@ void fnPumpControl_2(MyData &data, SetpointsStruct &setpoints){
     default:
     break;
   }
+  
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("PumpControl time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
 }
 //************************************************************************************
 
 // fnPjonReceiver
 void pj_receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info &packet_info){
 
+  old_time = millis();
   receive_from_ID = packet_info.tx.id; // от кого пришли данные
   if(SetpointsUnion.setpoints_data.debug_key== DEBUG_KEY_1){
     Serial.print(F("PJ receive_from_ID "));
@@ -1557,13 +1613,26 @@ void pj_receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_I
     }
     
   }
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("pj_receiver_function time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
 }
 //************************************************************************************************
 
 // fnPjonSender
 void fnPjonSender(void){   
-    
+
+  old_time = millis();  
   pjon_TX_water_sensor_response = bus.send_packet(PJON_WATER_FLOAT_SENSOR_ID, "R", 1); //отправляем запрос к датчику уровня воды    
+  
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("PjonSender time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
 
 }
 //*******************************************************************************************
@@ -1571,6 +1640,8 @@ void fnPjonSender(void){
 // fnWaterLevelControl
 void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, SetpointsStruct &setpoints, Alarms &alarms)
 {
+  old_time = millis();
+
   float water_tank_capacity_temp_value = (float)setpoints.water_tank_capacity; // для вычисления дробных значений
 
   switch (setpoints.water_sensor_type_selected)
@@ -1650,12 +1721,20 @@ void fnWaterLevelControl(MyData &data, PjonReceive &pj_sensor_receive_data, Setp
   default:
         break;
   }
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("WaterLevelControl time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
 }
 //*******************************************************************************************
 
 //convreter control
 void fnConverterControl(MyData &data, SetpointsStruct &setpoints)
 {
+  old_time = millis();
+
   uint8_t voltage = (uint8_t)data.battery_voltage * 10;
   static bool flag_convOff_due_voltage;    // флаг что конветер был выключен по напряжению
   static bool flag_convOff_due_ign_switch; // флаг что конветер был выключен по таймеру после выключения зажигания
@@ -1723,12 +1802,21 @@ void fnConverterControl(MyData &data, SetpointsStruct &setpoints)
   }
 
   data.converter_output_state = state;
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("ConverterControl time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
+
 }
 //*****************************************************************************************
 
 //fridge control
 void fnFridgeControl(MyData &data, SetpointsStruct &setpoints)
 {
+  old_time = millis();
+
   uint8_t voltage = (uint8_t)data.battery_voltage * 10;
   static bool flag_fridgeOff_due_voltage;    // флаг что конветер был выключен по напряжению
   static bool flag_fridgeOff_due_ign_switch; // флаг что конветер был выключен по таймеру после выключения зажигания
@@ -1796,6 +1884,13 @@ void fnFridgeControl(MyData &data, SetpointsStruct &setpoints)
   }
 
   data.fridge_output_state = state;
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("FridgeControl time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
+
 }
 //*****************************************************************************************
 
@@ -1898,6 +1993,8 @@ void fnAlarms(MyData &data, Alarms &alarms){
 // Buzzer Process
 void fnBuzzerProcess(MyData &data, Alarms &alarms){
 
+  old_time = millis();
+
   static bool door_old_state = data.door_switch_state;
   static bool pump_out_old_state = data.pump_output_state;
   static bool conv_out_old_state = data.converter_output_state;
@@ -1943,6 +2040,12 @@ void fnBuzzerProcess(MyData &data, Alarms &alarms){
     //noTone(BUZZER);
   }
 
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("BuzzerProcess time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
+
 }
 //********************************************************************************
 
@@ -1962,6 +2065,8 @@ void fnLcdBrightnessControl(MyData &data, SetpointsStruct &setpoints, GTimer &ti
 void fnMenuProcess(void){
   
   /*------------ Menu -----------------*/
+  old_time = millis();
+
   if(timerMenuUpdate.isReady()){
     //определение текущей страницы меню
     if(menu_current_item < display_num_lines) menu_current_page = 0;  
@@ -2060,9 +2165,33 @@ void fnMenuProcess(void){
       
       case MENU_LOGO_VIEW:
 
-        u8g2.clearBuffer();
-        u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
-        u8g2.sendBuffer();
+        switch (SetpointsUnion.setpoints_data.logo_selection)
+        {
+        case 0:
+          u8g2.clearBuffer();
+          u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+          u8g2.sendBuffer();
+          break;
+
+        case 1:
+          u8g2.clearBuffer();
+          //u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+          u8g2.sendBuffer();
+          break;
+
+        case 2:
+          u8g2.clearBuffer();
+          //u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+          u8g2.sendBuffer();
+          break;
+        
+        default:
+          u8g2.clearBuffer();
+          //пусто
+          u8g2.sendBuffer();
+          break;
+        }
+        
 
         if(buttonEnter.clicked()){
           menu_mode = MENU_PARAM_VIEW;
@@ -2078,6 +2207,12 @@ void fnMenuProcess(void){
     }
   }
   //end menu
+
+  if(SetpointsUnion.setpoints_data.debug_key == DEBUG_KEY_1){
+    Serial.print(F("MenuProcess time  "));
+    Serial.print(millis()-old_time);
+    Serial.println(F(" ms"));
+  }
 }
 
 //***********************************************************************************
@@ -2086,22 +2221,20 @@ void fnMenuProcess(void){
 
 void fnDebugPrint(void){
 
-  Serial.println(F("*************************** Inputs ********************************"));
   Serial.println(F(""));
+  Serial.println(F("*************************** Inputs ********************************"));
   Serial.print(F("Door input state "));Serial.println(main_data.door_switch_state);
   Serial.print(F("Ignition input state "));Serial.println(main_data.ignition_switch_state);
   Serial.print(F("Proximity sensor input state "));Serial.println(main_data.proximity_sensor_state);
   Serial.println(F(""));
   Serial.println(F(""));
   Serial.println(F("*************************** Outputs ********************************"));
-  Serial.println(F(""));
   Serial.print(F("Pump output state "));Serial.println(main_data.pump_output_state);
   Serial.print(F("Converter output state "));Serial.println(main_data.converter_output_state);
   Serial.print(F("Fridge output state "));Serial.println(main_data.fridge_output_state);
   Serial.println(F(""));
   Serial.println(F(""));
   Serial.println(F("*************************** Parameters ********************************"));
-  Serial.println(F(""));
   Serial.print(F("Battery voltage "));Serial.println(main_data.battery_voltage);
   Serial.print(F("Sensors supply voltage "));Serial.println(main_data.sensors_supply_voltage);
   Serial.print(F("Inside temperature "));Serial.println(main_data.inside_temperature);
@@ -2112,12 +2245,11 @@ void fnDebugPrint(void){
   Serial.println(F(""));
   Serial.println(F(""));
   Serial.println(F("*************************** Alarms ********************************"));
-  Serial.println(F(""));
   Serial.print(F("Error PJ water sensor "));Serial.println(present_alarms.pj_water_sensor);
   Serial.print(F("Error Resestive water sensor "));Serial.println(present_alarms.resist_water_sensor);
   Serial.print(F("Error sensors supply "));Serial.println(present_alarms.sens_supply);
   Serial.print(F("Error temp sensors "));Serial.println(present_alarms.temp_sensors);
   Serial.println(F(""));
-  Serial.println(F(""));
+  Serial.println(F("********************************************************************"));
 
 }
