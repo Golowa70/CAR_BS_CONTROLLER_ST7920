@@ -113,7 +113,7 @@ void setup() {
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
 
   u8g2.clearBuffer();
-  u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+  u8g2.drawXBMP(33,5,64,55,FK_logo_64x55);
   u8g2.sendBuffer();
   delay(1000);
 
@@ -169,7 +169,7 @@ void setup() {
   timerDebugPrint.setInterval(500);
   timerMbCheckConn.setMode(MANUAL);
   timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
-  timerMBdelay.setInterval(500);
+  timerMBdelay.setInterval(50);
 
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
 
@@ -285,6 +285,8 @@ void loop() {
       ModbusRTUServer.coilWrite(0x08, main_data.sensors_supply_output_state);
       ModbusRTUServer.coilWrite(0x09, main_data.low_washer_water_level); //
 
+      wdt_reset();
+
       ModbusRTUServer.holdingRegisterWrite(0x00, main_data.battery_voltage * 10);
       ModbusRTUServer.holdingRegisterWrite(0x01, main_data.inside_temperature * 10);
       ModbusRTUServer.holdingRegisterWrite(0x02, main_data.outside_temperature * 10);
@@ -325,10 +327,11 @@ void loop() {
 
   }
 
+  wdt_reset();
   //pjon
   if(timerPjonSender.isReady())fnPjonSender();
   if(timerPjonResponse.isReady())flag_pjon_water_sensor_connected = false;
-  bus.receive(1000);  
+  bus.receive(300);  
   bus.update();
 
   //delay(1);
@@ -816,7 +819,7 @@ void fnPrintMainView(void){
   u8g2.drawStr(55, 55, buffer);
 
 
-  u8g2.drawXBM(5, 12, 50, 50, water_level_50x50);
+  u8g2.drawXBMP(5, 12, 50, 50, water_level_50x50);
 
   u8g2.sendBuffer();
 }
@@ -2169,19 +2172,20 @@ void fnMenuProcess(void){
         {
         case 0:
           u8g2.clearBuffer();
-          u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+          u8g2.drawXBMP(33,5,64,55,FK_logo_64x55);
           u8g2.sendBuffer();
           break;
 
         case 1:
           u8g2.clearBuffer();
-          //u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+          //u8g2.drawXBM(1,1,128,64,dfwu_128x64);
+          u8g2.drawXBMP(0,0,128,64,dfwu_128x64);
           u8g2.sendBuffer();
           break;
 
         case 2:
           u8g2.clearBuffer();
-          //u8g2.drawXBM(33,5,64,55,FK_logo_64x55);
+          u8g2.drawXBMP(41,0,46,64,Tryzub1_46x64);
           u8g2.sendBuffer();
           break;
         
