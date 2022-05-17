@@ -58,6 +58,7 @@ GTimer timerBrightnessOff(MS);
 GTimer timerDebugPrint(MS);
 GTimer timerMbCheckConn(MS);
 GTimer timerMBdelay(MS);
+GTimer timerScreenSaver(MS);
 
 //-------- Filters ---------------------------
 GFilterRA ps_voltage_filter;
@@ -170,6 +171,7 @@ void setup() {
   timerMbCheckConn.setMode(MANUAL);
   timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
   timerMBdelay.setInterval(50);
+  timerScreenSaver.setTimeout(MINUTE * SCREENSAVER_TIMEOUT);
 
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
 
@@ -816,10 +818,11 @@ void fnPrintMainView(void){
 
   sprintf(buffer,"%d L",main_data.water_level_liter);
   u8g2.setFont(u8g2_font_ncenB18_tr);	//
-  u8g2.drawStr(55, 55, buffer);
+  u8g2.drawStr(60, 58, buffer);
 
 
-  u8g2.drawXBMP(5, 12, 50, 50, water_level_50x50);
+  // u8g2.drawXBMP(5, 12, 50, 50, water_level_50x50);
+  u8g2.drawXBMP(2, 12, 50, 50, water_level_tap_50x50);
 
   u8g2.sendBuffer();
 }
@@ -2209,6 +2212,15 @@ void fnMenuProcess(void){
       break;
 
     }
+
+    if(!digitalRead(BUTTON_UP) || !digitalRead(BUTTON_DOWN) || !digitalRead(BUTTON_ENTER_ESC)){  //reset of screensaver timer 
+      timerScreenSaver.setTimeout(MINUTE * SCREENSAVER_TIMEOUT);
+    }
+
+    if(menu_mode == MENU_MAIN_VIEW || menu_mode == MENU_PARAM_VIEW){   // go to screensaver
+      if(timerScreenSaver.isReady()) menu_mode = MENU_LOGO_VIEW;    
+    }
+
   }
   //end menu
 

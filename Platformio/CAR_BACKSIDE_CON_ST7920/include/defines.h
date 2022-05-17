@@ -117,6 +117,7 @@
 #define START_DELAY                 1000  //ms задержка выполнения некоторых функций после подачи питания (пока датчики запустятся)
 #define PRX_SENSOR_FEEDBACK_DELAY   500   //ms задержка реакции датчика приближения (для стабильности)
 #define WDT_RESET_PERIOD            500000  // us период сброса ADM705 < 1.6 sec
+#define SCREENSAVER_TIMEOUT         2       // min
 
 //MENU
 #define MENU_SETPOINTS_NUM_ITEMS        35    // кол-во пунктов меню настроек
