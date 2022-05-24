@@ -89,7 +89,7 @@ void fnDefaultSetpointsInit(void){
 
     default_setpoints_data.fridge_sensor_id = 3;
     default_setpoints_data.debug_key = DEBUG_KEY_0;
-    default_setpoints_data.spare_1 = 0;
+    default_setpoints_data.screensaver_timeout = 5;
     default_setpoints_data.spare_2 = 0;
 
     default_setpoints_data.key = EEPROM_KEY;

@@ -171,7 +171,7 @@ void setup() {
   timerMbCheckConn.setMode(MANUAL);
   timerMbCheckConn.setTimeout(MB_CHECK_CONN_TIME);
   timerMBdelay.setInterval(50);
-  timerScreenSaver.setTimeout(MINUTE * SCREENSAVER_TIMEOUT);
+  timerScreenSaver.setTimeout(SetpointsUnion.setpoints_data.screensaver_timeout * MINUTE);
 
   digitalWrite(WDT_RESET_OUT, !digitalRead(WDT_RESET_OUT));
 
@@ -2214,7 +2214,7 @@ void fnMenuProcess(void){
     }
 
     if(!digitalRead(BUTTON_UP) || !digitalRead(BUTTON_DOWN) || !digitalRead(BUTTON_ENTER_ESC)){  //reset of screensaver timer 
-      timerScreenSaver.setTimeout(MINUTE * SCREENSAVER_TIMEOUT);
+      timerScreenSaver.setTimeout(SetpointsUnion.setpoints_data.screensaver_timeout * MINUTE);
     }
 
     if(menu_mode == MENU_MAIN_VIEW || menu_mode == MENU_PARAM_VIEW){   // go to screensaver

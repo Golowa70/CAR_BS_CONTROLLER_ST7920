@@ -60,7 +60,7 @@ struct SetpointsStruct { // структура для уставок
 
   uint8_t fridge_sensor_id;
   uint8_t debug_key;
-  uint8_t spare_1;
+  uint8_t screensaver_timeout;
   uint8_t spare_2;
   
 
@@ -187,7 +187,7 @@ struct MyData
   const char i30[] PROGMEM = "Outside sid";
   const char i31[] PROGMEM = "Fridge sid";
   const char i32[] PROGMEM = "Debug print";
-  const char i33[] PROGMEM = "Parametr 34";
+  const char i33[] PROGMEM = "Screensaver ";
   const char i34[] PROGMEM = "Parametr 35";
   
   /*Массив ссылок на имена пунктов  меню настроек, обращение к названию пунктов по их номеру*/
@@ -211,7 +211,7 @@ struct MyData
     0,0,10,0,0,
     0,1,0,0,0,
     1,0,30,0,1,
-    1,1,0,0,0,
+    1,1,0,1,0,
   };
 
   //Массив максимальных значений параметров
